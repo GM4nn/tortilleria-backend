@@ -3,8 +3,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+# contextlib
+from contextlib import asynccontextmanager
+
 # config
 from app.core.config import settings
+
+# alembic
+from alembic.config import Config
+from alembic import command
 
 # routers
 from app.src.routers import (
@@ -21,11 +28,16 @@ from app.src.routers import (
     supply,
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    command.upgrade(Config("alembic.ini"), "head")
+    yield
 
 app = FastAPI(
     title="TORTILLERIA-API",
     description="API web del sistema de la tortilleria.",
     version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -35,6 +47,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 
 @app.exception_handler(ValueError)
