@@ -13,7 +13,9 @@ import app.src.models  # noqa: F401  (registra TODAS las tablas en la metadata)
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False para no apagar los loggers de uvicorn
+    # cuando Alembic corre dentro del proceso de la app (lifespan).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

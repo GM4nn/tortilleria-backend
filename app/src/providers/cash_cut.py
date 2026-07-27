@@ -1,5 +1,5 @@
 # datetime
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 # sqlalchemy
 from sqlalchemy import func
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 # app
 from app.core.constants import mexico_now, ORDER_STATUSES_COMPLETE
 from app.src.models import CashCut, Order, Sale
-from app.src.schemas.cash_cut import CashCutCreate
+from app.src.providers.pagination import PaginationProvider
+from app.src.schemas.cash_cut import CashCutCreate, PaginatedCashCuts
 
 
 def _day_range(d) -> tuple[datetime, datetime]:
@@ -51,8 +52,32 @@ class CashCutProvider:
             "expected_total": sales_total + orders_total,
         }
 
-    def get_all(self) -> list[CashCut]:
-        return self._db_session.query(CashCut).order_by(CashCut.closed_at.desc()).all()
+    def get_all(self, offset: int = 0, limit: int | None = None, filters=None) -> list[CashCut]:
+        query = self._db_session.query(CashCut)
+        if filters:
+            query = query.filter(*filters)
+        query = query.order_by(CashCut.closed_at.desc())
+        if limit is not None:
+            query = query.offset(offset).limit(limit)
+        return query.all()
+
+    def build_date_range_filter(self, start_date: date | None = None, end_date: date | None = None):
+        filters = []
+        if start_date:
+            filters.append(
+                CashCut.closed_at >= datetime(start_date.year, start_date.month, start_date.day)
+            )
+        if end_date:
+            end = datetime(end_date.year, end_date.month, end_date.day) + timedelta(days=1)
+            filters.append(CashCut.closed_at < end)
+        return filters
+
+    def get_all_paginated(self, offset: int = 0, limit: int = 15, filters=None) -> PaginatedCashCuts:
+        pagination = PaginationProvider(self._db_session).get_pagination_data(
+            CashCut, offset, limit, filters
+        )
+        data = self.get_all(offset=offset, limit=limit, filters=filters)
+        return PaginatedCashCuts(pagination=pagination, data=data)
 
     def get_by_id(self, cut_id: int) -> CashCut:
         cut = self._db_session.query(CashCut).filter(CashCut.id == cut_id).first()

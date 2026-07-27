@@ -4,6 +4,9 @@ from datetime import datetime
 # pydantic
 from pydantic import BaseModel, ConfigDict
 
+# app
+from app.src.schemas.pagination import Pagination
+
 
 class CashCutPeriodSummary(BaseModel):
     sales_count: int
@@ -45,3 +48,8 @@ class CashCutRead(BaseModel):
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedCashCuts(BaseModel):
+    pagination: Pagination
+    data: list[CashCutRead]
