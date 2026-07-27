@@ -4,6 +4,9 @@ from datetime import datetime
 # pydantic
 from pydantic import BaseModel, ConfigDict, Field
 
+# app
+from app.src.schemas.pagination import Pagination
+
 
 class SaleItemInput(BaseModel):
     product_id: int
@@ -32,3 +35,8 @@ class SaleRead(BaseModel):
     details: list[SaleDetailRead] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedSales(BaseModel):
+    pagination: Pagination
+    data: list[SaleRead]

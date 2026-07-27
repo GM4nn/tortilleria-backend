@@ -1,5 +1,5 @@
 # datetime
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 # sqlalchemy
 from sqlalchemy import func
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 # app
 from app.core.constants import mexico_now
 from app.src.models import Product, Sale, SaleDetail
-from app.src.schemas.sale import SaleCreate
+from app.src.providers.pagination import PaginationProvider
+from app.src.schemas.sale import PaginatedSales, SaleCreate
 
 
 class SaleProvider:
@@ -34,15 +35,32 @@ class SaleProvider:
             ],
         }
 
-    def get_all(self, only_today: bool = False) -> list[dict]:
+    def get_all(self, offset: int = 0, limit: int | None = None, filters=None) -> list[dict]:
         query = self._db_session.query(Sale)
-        if only_today:
-            today = mexico_now().date()
-            day_start = datetime(today.year, today.month, today.day)
-            day_end = day_start + timedelta(days=1)
-            query = query.filter(Sale.date >= day_start, Sale.date < day_end)
-        sales = query.order_by(Sale.date.desc()).all()
-        return [self._to_dict(s) for s in sales]
+        if filters:
+            query = query.filter(*filters)
+        query = query.order_by(Sale.date.desc())
+        if limit is not None:
+            query = query.offset(offset).limit(limit)
+        return [self._to_dict(s) for s in query.all()]
+
+    def build_date_range_filter(self, start_date: date | None = None, end_date: date | None = None):
+        filters = []
+        if start_date:
+            filters.append(
+                Sale.date >= datetime(start_date.year, start_date.month, start_date.day)
+            )
+        if end_date:
+            end = datetime(end_date.year, end_date.month, end_date.day) + timedelta(days=1)
+            filters.append(Sale.date < end)
+        return filters
+
+    def get_all_paginated(self, offset: int = 0, limit: int = 10, filters=None) -> PaginatedSales:
+        pagination = PaginationProvider(self._db_session).get_pagination_data(
+            Sale, offset, limit, filters
+        )
+        data = self.get_all(offset=offset, limit=limit, filters=filters)
+        return PaginatedSales(pagination=pagination, data=data)
 
     def get_by_id(self, sale_id: int) -> dict:
         sale = self._db_session.query(Sale).filter(Sale.id == sale_id).first()

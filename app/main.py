@@ -1,21 +1,10 @@
-# other libs
-from contextlib import asynccontextmanager
-from collections.abc import AsyncGenerator
-
 # fastapi
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# db
-from app.core.database import engine
-from app.core.base import Base
-
 # config
 from app.core.config import settings
-
-# models (registra la metadata para create_all)
-import app.src.models  # noqa: F401
 
 # routers
 from app.src.routers import (
@@ -33,17 +22,10 @@ from app.src.routers import (
 )
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    Base.metadata.create_all(bind=engine)
-    yield
-
-
 app = FastAPI(
     title="TORTILLERIA-API",
     description="API web del sistema de la tortilleria.",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 app.add_middleware(

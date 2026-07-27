@@ -33,8 +33,24 @@ python -m venv venv
 venv\Scripts\activate
 pip install -r app/requirements.txt
 copy .env.example .env
+alembic upgrade head          # crea/actualiza el esquema (Alembic)
 uvicorn app.main:app --reload
 ```
+
+## Migraciones (Alembic)
+
+El esquema lo gestiona **Alembic** (la app ya no usa `create_all`).
+
+```bash
+alembic upgrade head                                  # aplicar migraciones
+alembic revision --autogenerate -m "cambio"           # generar al cambiar un modelo
+alembic downgrade -1                                  # revertir la última
+```
+
+- SQLite con `render_as_batch=True` (permite `ALTER TABLE`).
+- La URL sale de `app.core.config.settings`, no del `.ini`.
+- Base incluida: `alembic/versions/*_init.py` (las 14 tablas).
+- Si ya tenías tablas creadas por otra vía: `alembic stamp head` para marcarla al día.
 
 - API: http://localhost:8000/api
 - Docs (Swagger): http://localhost:8000/docs

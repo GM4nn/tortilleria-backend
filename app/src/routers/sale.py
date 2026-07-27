@@ -1,3 +1,6 @@
+# datetime
+from datetime import date
+
 # fastapi
 from fastapi import APIRouter, Depends, status
 
@@ -7,15 +10,23 @@ from sqlalchemy.orm import Session
 # app
 from app.core.database import get_db
 from app.src.providers.sale import SaleProvider
-from app.src.schemas.sale import SaleCreate, SaleRead
+from app.src.schemas.sale import PaginatedSales, SaleCreate, SaleRead
 
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
 
-@router.get("", response_model=list[SaleRead])
-def list_sales(today: bool = False, db: Session = Depends(get_db)):
-    return SaleProvider(db).get_all(only_today=today)
+@router.get("", response_model=PaginatedSales)
+def list_sales(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    offset: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+):
+    provider = SaleProvider(db)
+    filters = provider.build_date_range_filter(date_from, date_to)
+    return provider.get_all_paginated(offset=offset, limit=limit, filters=filters)
 
 
 @router.get("/today")
