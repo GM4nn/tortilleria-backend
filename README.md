@@ -1,7 +1,7 @@
 # Tortillería — Backend (FastAPI REST)
 
 API web que reutiliza la lógica del sistema de escritorio, siguiendo la estructura
-del *backend guide* (core + src/{models,providers,schemas,routers}), pero en REST.
+del *backend guide* (core + src/{models,providers,schemas,routers}), pero en REST
 
 ## Estructura
 
