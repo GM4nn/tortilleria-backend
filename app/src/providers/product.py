@@ -12,9 +12,7 @@ class ProductProvider:
         self._db_session: Session = db_session
 
     def get_all(self) -> list[Product]:
-        return self._db_session.query(Product).filter(
-            Product.active.is_(True)
-        ).order_by(Product.name).all()
+        return self._db_session.query(Product).order_by(Product.name).all()
 
     def get_by_id(self, product_id: int) -> Product:
         product = self._db_session.query(Product).filter(
@@ -42,6 +40,5 @@ class ProductProvider:
         return product
 
     def delete(self, product_id: int) -> None:
-        product = self.get_by_id(product_id)
-        product.active = False
+        self._db_session.delete(self.get_by_id(product_id))
         self._db_session.commit()
