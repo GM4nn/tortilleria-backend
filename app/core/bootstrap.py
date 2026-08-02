@@ -52,7 +52,7 @@ def create_mostrador_customer(db: Session) -> None:
         customer_name=CUSTOMER_MOSTRADOR_NAME,
         customer_category=CUSTOMER_CATEGORY_MOSTRADOR,
         active=True,
-        active2=True,
+        active2=False,
     ))
     db.commit()
 
