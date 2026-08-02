@@ -13,6 +13,9 @@ from app.core.config import settings
 from alembic.config import Config
 from alembic import command
 
+# bootstrap (datos por defecto)
+from app.core.bootstrap import run_bootstrap
+
 # routers
 from app.src.routers import (
     assistant,
@@ -20,6 +23,7 @@ from app.src.routers import (
     customer,
     customer_price,
     dealer,
+    meta,
     order,
     product,
     report,
@@ -31,6 +35,7 @@ from app.src.routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     command.upgrade(Config("alembic.ini"), "head")
+    run_bootstrap()
     yield
 
 app = FastAPI(
@@ -68,6 +73,7 @@ _routers = [
     supply,
     report,
     assistant,
+    meta,
 ]
 
 for module in _routers:
