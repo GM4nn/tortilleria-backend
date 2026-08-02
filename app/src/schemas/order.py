@@ -30,6 +30,14 @@ class OrderDetailRead(BaseModel):
     subtotal: float
 
 
+class OrderRefundRead(BaseModel):
+    product_id: int
+    product_name: str
+    quantity: float
+    comments: str | None
+    created_at: datetime | None
+
+
 class OrderRead(BaseModel):
     id: int
     date: datetime | None
@@ -42,6 +50,7 @@ class OrderRead(BaseModel):
     payment_status: str
     default_dealer: str | None
     details: list[OrderDetailRead] = []
+    refunds: list[OrderRefundRead] = []
 
     model_config = ConfigDict(from_attributes=True)
 

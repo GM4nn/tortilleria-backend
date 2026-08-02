@@ -2,7 +2,7 @@
 from datetime import date, datetime, timedelta
 
 # sqlalchemy
-from sqlalchemy import func
+from sqlalchemy import exists, func
 from sqlalchemy.orm import Session
 
 # app
@@ -47,6 +47,16 @@ class OrderProvider:
                     "subtotal": d.subtotal,
                 }
                 for d in order.order_details
+            ],
+            "refunds": [
+                {
+                    "product_id": r.product_id,
+                    "product_name": r.product.name if r.product else "N/A",
+                    "quantity": r.quantity,
+                    "comments": r.comments,
+                    "created_at": r.created_at,
+                }
+                for r in order.refunds
             ],
         }
 
@@ -93,6 +103,10 @@ class OrderProvider:
 
     def build_dealer_filter(self, dealer: str):
         return [Order.default_dealer == dealer]
+
+    def build_has_refunds_filter(self, has_refunds: bool):
+        refund_exists = exists().where(OrderRefund.order_id == Order.id)
+        return [refund_exists] if has_refunds else [~refund_exists]
 
     def build_payment_status_filter(self, payment_status: str):
         paid = func.coalesce(Order.amount_paid, 0.0)

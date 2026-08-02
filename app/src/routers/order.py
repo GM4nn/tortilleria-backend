@@ -30,6 +30,7 @@ def list_orders(
     payment_status: str | None = None,
     dealer: str | None = None,
     customer_id: int | None = None,
+    has_refunds: bool | None = None,
     offset: int = 0,
     limit: int = 10,
     db: Session = Depends(get_db),
@@ -45,6 +46,8 @@ def list_orders(
         filters += provider.build_dealer_filter(dealer)
     if customer_id:
         filters += provider.build_customer_filter(customer_id)
+    if has_refunds is not None:
+        filters += provider.build_has_refunds_filter(has_refunds)
 
     return provider.get_all_paginated(offset=offset, limit=limit, filters=filters)
 
