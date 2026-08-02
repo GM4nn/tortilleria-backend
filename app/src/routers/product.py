@@ -36,3 +36,4 @@ def update_product(product_id: int, data: ProductUpdate, db: Session = Depends(g
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(product_id: int, db: Session = Depends(get_db)):
     ProductProvider(db).delete(product_id)
+    return {"message": "Producto eliminado correctamente"}

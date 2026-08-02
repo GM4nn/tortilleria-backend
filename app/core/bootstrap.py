@@ -44,6 +44,7 @@ def create_mostrador_customer(db: Session) -> None:
     exists = db.query(Customer).filter(
         Customer.customer_category == CUSTOMER_CATEGORY_MOSTRADOR,
         Customer.active.is_(True),
+        Customer.active2.is_(False),
     ).first()
     if exists:
         return
