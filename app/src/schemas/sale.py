@@ -15,7 +15,7 @@ class SaleItemInput(BaseModel):
 
 
 class SaleCreate(BaseModel):
-    customer_id: int
+    customer_id: int | None = None  # si no viene, se usa el Cliente Mostrador
     items: list[SaleItemInput] = Field(min_length=1)
 
 

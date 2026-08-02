@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 
 # app
-from app.core.constants import mexico_now
+from app.core.constants import CUSTOMER_CATEGORY_MOSTRADOR, mexico_now
 from app.src.models import Customer
 from app.src.schemas.customer import CustomerCreate, CustomerUpdate
 
@@ -17,6 +17,16 @@ class CustomerProvider:
             Customer.active.is_(True),
             Customer.active2.is_(True),
         ).order_by(Customer.customer_name).all()
+
+    def get_mostrador(self) -> Customer:
+        # El Mostrador vive oculto (active2=False); se busca por categoría, no por la lista
+        customer = self._db_session.query(Customer).filter(
+            Customer.customer_category == CUSTOMER_CATEGORY_MOSTRADOR,
+            Customer.active.is_(True),
+        ).first()
+        if not customer:
+            raise ValueError("Cliente Mostrador no encontrado")
+        return customer
 
     def get_by_id(self, customer_id: int) -> Customer:
         customer = self._db_session.query(Customer).filter(

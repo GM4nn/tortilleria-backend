@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 # app
 from app.core.constants import mexico_now
 from app.src.models import Product, Sale, SaleDetail
+from app.src.providers.customer import CustomerProvider
 from app.src.providers.pagination import PaginationProvider
 from app.src.schemas.sale import PaginatedSales, SaleCreate
 
@@ -87,7 +88,11 @@ class SaleProvider:
                 subtotal=subtotal,
             ))
 
-        sale = Sale(total=total, customer_id=data.customer_id)
+        customer_id = data.customer_id
+        if customer_id is None:
+            customer_id = CustomerProvider(self._db_session).get_mostrador().id
+
+        sale = Sale(total=total, customer_id=customer_id)
         sale.sales_details = details
         self._db_session.add(sale)
         self._db_session.commit()
