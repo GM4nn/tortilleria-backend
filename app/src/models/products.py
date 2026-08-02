@@ -13,7 +13,8 @@ class Product(Base):
     active = Column(Boolean, default=True)
 
     # Relationship
-    sales_details = relationship('SaleDetail', back_populates='product')
+    # Al borrar un producto se borran los detalles de venta que lo referencian
+    sales_details = relationship('SaleDetail', back_populates='product', cascade='all, delete')
 
     def __repr__(self):
         return f"<Product(id={self.id}, icon='{self.icon}', name='{self.name}', price={self.price})>"

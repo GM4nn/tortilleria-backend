@@ -58,8 +58,10 @@ class SupplierProvider:
         return supplier
 
     def delete(self, supplier_id: int) -> None:
+        # Borrado real: borra las compras que lo referencian y desvincula los insumos
+        # (el proveedor es opcional en el insumo, así que el insumo se conserva)
         supplier = self.get_by_id(supplier_id)
         if supplier.is_default:
             raise ValueError("No se puede eliminar un proveedor del sistema")
-        supplier.active = False
+        self._db_session.delete(supplier)
         self._db_session.commit()

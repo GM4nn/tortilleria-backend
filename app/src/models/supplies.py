@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Date, Boolean
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.base import Base
 from app.core.constants import mexico_now
 
@@ -44,7 +44,8 @@ class SupplyPurchase(Base):
 
     # Relationships
     supply = relationship("Supply", back_populates="purchases")
-    supplier = relationship("Supplier", backref="supply_purchases")
+    # Al borrar un proveedor se borran sus compras (el insumo se conserva; ver provider)
+    supplier = relationship("Supplier", backref=backref("supply_purchases", cascade="all, delete"))
 
     def __repr__(self):
         return f"<SupplyPurchase(id={self.id}, supply_id={self.supply_id}, supplier_id={self.supplier_id}, date={self.purchase_date})>"

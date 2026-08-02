@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.base import Base
 from app.core.constants import mexico_now
 
@@ -15,8 +15,9 @@ class OrderRefund(Base):
     created_at = Column(DateTime, default=mexico_now)
 
     # Relationships
-    order = relationship('Order', backref='refunds')
-    product = relationship('Product', backref='order_refunds')
+    # Devoluciones: se borran con su pedido (owner) y con el producto referenciado
+    order = relationship('Order', backref=backref('refunds', cascade='all, delete-orphan'))
+    product = relationship('Product', backref=backref('order_refunds', cascade='all, delete'))
 
     def __repr__(self):
         return f"<OrderRefund(id={self.id}, order_id={self.order_id}, product_id={self.product_id}, qty={self.quantity})>"

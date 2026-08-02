@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.base import Base
 from app.core.constants import (
     mexico_now,
@@ -24,7 +24,8 @@ class Order(Base):
 
     # Relationships
     order_details = relationship('OrderDetail', back_populates='order', cascade='all, delete-orphan')
-    customer = relationship('Customer', backref='orders')
+    # Al borrar un cliente se borran sus pedidos (y por cascada sus detalles/devoluciones)
+    customer = relationship('Customer', backref=backref('orders', cascade='all, delete-orphan'))
 
     @property
     def payment_status(self):
@@ -52,7 +53,8 @@ class OrderDetail(Base):
 
     # Relationships
     order = relationship('Order', back_populates='order_details')
-    product = relationship('Product', backref='order_details')
+    # Al borrar un producto se borran los detalles de pedido que lo referencian
+    product = relationship('Product', backref=backref('order_details', cascade='all, delete'))
 
     def __repr__(self):
         return f"<OrderDetail(id={self.id}, order_id={self.order_id}, product_id={self.product_id})>"

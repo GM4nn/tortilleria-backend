@@ -63,6 +63,7 @@ class CustomerProvider:
         return customer
 
     def delete(self, customer_id: int) -> None:
+        # Borrado real: arrastra pedidos, ventas y precios personalizados (cascada ORM)
         customer = self.get_by_id(customer_id)
-        customer.active = False
+        self._db_session.delete(customer)
         self._db_session.commit()

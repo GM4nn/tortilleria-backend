@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.src.schemas.dealer import DealerCreate, DealerUpdate
 
 # models
-from app.src.models import Dealer
+from app.src.models import Dealer, Order
 
 # services
 from app.src.services.firestore import firestore_service
@@ -80,7 +80,11 @@ class DealerProvider:
             raise ValueError("Repartidor no encontrado")
 
         username: str = dealer.username
-        dealer.active = False
+        # Borrado real: los pedidos conservan su historial pero quedan sin repartidor
+        self._db_session.query(Order).filter(Order.default_dealer == username).update(
+            {Order.default_dealer: None}, synchronize_session=False
+        )
+        self._db_session.delete(dealer)
         self._db_session.commit()
 
         firestore_service.delete_dealer(username)

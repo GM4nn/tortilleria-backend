@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.base import Base
 from app.core.constants import mexico_now
 
@@ -18,8 +18,9 @@ class CustomerProductPrice(Base):
         UniqueConstraint('customer_id', 'product_id', name='uq_customer_product_price'),
     )
 
-    customer = relationship('Customer')
-    product = relationship('Product')
+    # El precio personalizado se borra al borrar el cliente (owner) o el producto
+    customer = relationship('Customer', backref=backref('product_prices', cascade='all, delete-orphan'))
+    product = relationship('Product', backref=backref('customer_prices', cascade='all, delete'))
 
     def __repr__(self):
         return f"<CustomerProductPrice(customer_id={self.customer_id}, product_id={self.product_id}, price={self.custom_price})>"
