@@ -23,7 +23,7 @@ app/
 
 Cada recurso = `model → schema → provider → router` + `include_router` en `main`.
 El `provider` recibe la `Session` (inyectada con `Depends(get_db)`), consulta y la
-capa `get_db` la cierra al terminar la request.
+capa `get_db` la cierra al terminar la request
 
 ## Correr en local
 
