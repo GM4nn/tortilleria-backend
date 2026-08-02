@@ -15,10 +15,7 @@ class ProductProvider:
         return self._db_session.query(Product).order_by(Product.name).all()
 
     def get_by_id(self, product_id: int) -> Product:
-        product = self._db_session.query(Product).filter(
-            Product.id == product_id,
-            Product.active.is_(True),
-        ).first()
+        product = self._db_session.query(Product).filter(Product.id == product_id).first()
         if not product:
             raise ValueError("Producto no encontrado")
         return product
@@ -42,3 +39,4 @@ class ProductProvider:
     def delete(self, product_id: int) -> None:
         self._db_session.delete(self.get_by_id(product_id))
         self._db_session.commit()
+        return {"message": "Producto eliminado correctamente"}
