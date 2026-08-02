@@ -56,3 +56,16 @@ def list_purchases(supply_id: int, db: Session = Depends(get_db)):
 )
 def add_purchase(supply_id: int, data: SupplyPurchaseCreate, db: Session = Depends(get_db)):
     return SupplyProvider(db).add_purchase(supply_id, data)
+
+
+@router.put(
+    "/{supply_id}/purchases/{purchase_id}",
+    response_model=SupplyPurchaseRead,
+)
+def update_purchase(
+    supply_id: int,
+    purchase_id: int,
+    data: SupplyPurchaseCreate,
+    db: Session = Depends(get_db),
+):
+    return SupplyProvider(db).update_purchase(purchase_id, data)

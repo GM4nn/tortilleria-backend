@@ -1,10 +1,8 @@
-# datetime
-from datetime import date
-
 # sqlalchemy
 from sqlalchemy.orm import Session
 
 # app
+from app.core.constants import mexico_now
 from app.src.models import Supply, SupplyPurchase
 from app.src.schemas.supply import SupplyCreate, SupplyPurchaseCreate, SupplyUpdate
 
@@ -68,7 +66,7 @@ class SupplyProvider:
         purchase = SupplyPurchase(
             supply_id=supply_id,
             supplier_id=data.supplier_id,
-            purchase_date=data.purchase_date or date.today(),
+            purchase_date=data.purchase_date or mexico_now().date(),
             quantity=data.quantity,
             unit=data.unit,
             unit_price=data.unit_price,
@@ -77,6 +75,25 @@ class SupplyProvider:
             notes=data.notes,
         )
         self._db_session.add(purchase)
+        self._db_session.commit()
+        self._db_session.refresh(purchase)
+        return purchase
+
+    def update_purchase(self, purchase_id: int, data: SupplyPurchaseCreate) -> SupplyPurchase:
+        purchase = self._db_session.query(SupplyPurchase).filter(
+            SupplyPurchase.id == purchase_id
+        ).first()
+        if not purchase:
+            raise ValueError("Compra no encontrada")
+
+        purchase.supplier_id = data.supplier_id
+        purchase.purchase_date = data.purchase_date or purchase.purchase_date
+        purchase.quantity = data.quantity
+        purchase.unit = data.unit
+        purchase.unit_price = data.unit_price
+        purchase.total_price = data.total_price
+        purchase.remaining = data.remaining
+        purchase.notes = data.notes
         self._db_session.commit()
         self._db_session.refresh(purchase)
         return purchase
