@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SupplyBase(BaseModel):
     supply_name: str = Field(min_length=1, max_length=100)
-    supplier_id: int
+    supplier_id: int | None = None
     unit: str = Field(default="kilos", max_length=50)
 
 
@@ -22,7 +22,7 @@ class SupplyUpdate(SupplyBase):
 class SupplyRead(BaseModel):
     id: int
     supply_name: str
-    supplier_id: int
+    supplier_id: int | None
     unit: str
     is_default: bool
 

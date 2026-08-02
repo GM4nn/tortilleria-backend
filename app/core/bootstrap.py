@@ -64,11 +64,15 @@ def ensure_default_supplies(db: Session) -> None:
 
     with open(path, newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
-            if db.query(Supply).filter(Supply.supply_name == row["supply_name"]).first():
+            if db.query(Supply).filter(
+                Supply.supply_name == row["supply_name"],
+                Supply.is_default.is_(True),
+            ).first():
                 continue
 
             supplier = db.query(Supplier).filter(
-                Supplier.supplier_name == row["supplier_name"]
+                Supplier.supplier_name == row["supplier_name"],
+                Supplier.is_default.is_(True),
             ).first()
             if not supplier:
                 supplier = Supplier(
@@ -92,11 +96,32 @@ def ensure_default_supplies(db: Session) -> None:
     db.commit()
 
 
+def add_default_supplies(db: Session) -> None:
+    path = DEFAULT_DIR / "supplies.csv"
+    if not path.exists():
+        return
+
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            if db.query(Supply).filter(Supply.supply_name == row["supply_name"]).first():
+                continue
+
+            db.add(Supply(
+                supply_name=row["supply_name"],
+                supplier_id=None,  # sin proveedor; se asigna despues
+                unit=row["unit"],
+                is_default=False,
+            ))
+
+    db.commit()
+
+
 def run_bootstrap() -> None:
     db = SessionLocal()
     try:
         add_default_products(db)
         create_mostrador_customer(db)
-        ensure_default_supplies(db)
+        ensure_default_supplies(db)   # Luz CFE / Gas Nieto (is_default, protegidos)
+        add_default_supplies(db)      # insumos normales sin proveedor (deletables)
     finally:
         db.close()
