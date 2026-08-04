@@ -47,3 +47,6 @@ PRODUCT_ICONS = [
 # Códigos de productos especiales usados por la lógica (pedidos, pérdidas, etc.)
 PRODUCT_CODE_TORTILLA_KILO = "TORTILLA_KILO"
 PRODUCT_CODE_TOTOPOS = "TOTOPOS"
+
+# Usuario con acceso total; los demás solo ven ventas, pedidos y caja
+USER_ADMIN = "admin"

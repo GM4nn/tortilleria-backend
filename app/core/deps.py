@@ -1,10 +1,11 @@
 """Dependencias de autenticación (JWT)."""
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.constants import USER_ADMIN
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.src.models import User
@@ -40,5 +41,27 @@ def get_current_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado"
+        )
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    # Solo el usuario admin puede acceder (además de estar autenticado)
+    if user.username != USER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador puede acceder a esta sección",
+        )
+    return user
+
+
+def read_any_write_admin(
+    request: Request, user: User = Depends(get_current_user)
+) -> User:
+    # Cualquier autenticado puede LEER (GET); solo el admin puede crear/editar/borrar
+    if request.method not in ("GET", "HEAD", "OPTIONS") and user.username != USER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador puede modificar esto",
         )
     return user

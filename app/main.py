@@ -4,7 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # auth
-from app.core.deps import get_current_user, require_api_key
+from app.core.deps import (
+    get_current_user,
+    read_any_write_admin,
+    require_admin,
+    require_api_key,
+)
 
 # contextlib
 from contextlib import asynccontextmanager
@@ -69,24 +74,39 @@ app.include_router(auth.router, prefix="/api")
 # Gestión de usuarios: protegida con API key (SECRET_KEY), no con sesión
 app.include_router(user.router, prefix="/api", dependencies=[Depends(require_api_key)])
 
-# El resto del API exige token JWT
-_protected_routers = [
-    dealer,
-    customer,
-    customer_price,
-    product,
-    supplier,
+# Cualquier usuario autenticado (ventas, pedidos y caja)
+_user_routers = [
     order,
     sale,
-    cash_cut,
+    cash_cut
+]
+
+for module in _user_routers:
+    app.include_router(module.router, prefix="/api", dependencies=[Depends(get_current_user)])
+
+# Lectura para cualquier autenticado (para armar ventas/pedidos); escritura solo admin
+_read_routers = [
+    product,
+    customer,
+    dealer,
+]
+
+for module in _read_routers:
+    app.include_router(module.router, prefix="/api", dependencies=[Depends(read_any_write_admin)])
+
+# Solo admin: precios personalizados, proveedores, insumos, reportes/finanzas,
+# asistente y meta
+_admin_routers = [
+    customer_price,
+    supplier,
     supply,
     report,
     assistant,
     meta,
 ]
 
-for module in _protected_routers:
-    app.include_router(module.router, prefix="/api", dependencies=[Depends(get_current_user)])
+for module in _admin_routers:
+    app.include_router(module.router, prefix="/api", dependencies=[Depends(require_admin)])
 
 
 @app.get(
