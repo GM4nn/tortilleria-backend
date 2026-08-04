@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 # app
 from app.core.database import get_db
 from app.src.providers.supplier import SupplierProvider
-from app.src.schemas.supplier import SupplierCreate, SupplierRead, SupplierUpdate
+from app.src.schemas.supplier import (
+    PaginatedSuppliers,
+    SupplierCreate,
+    SupplierRead,
+    SupplierUpdate,
+)
 
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
@@ -16,6 +21,15 @@ router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 @router.get("", response_model=list[SupplierRead])
 def list_suppliers(db: Session = Depends(get_db)):
     return SupplierProvider(db).get_all()
+
+
+@router.get("/paginated", response_model=PaginatedSuppliers)
+def list_suppliers_paginated(
+    offset: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+):
+    return SupplierProvider(db).get_all_paginated(offset=offset, limit=limit)
 
 
 @router.get("/{supplier_id}", response_model=SupplierRead)

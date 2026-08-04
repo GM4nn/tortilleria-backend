@@ -32,6 +32,8 @@ def add_default_products(db: Session) -> None:
                 name=row["name"],
                 price=float(row["price"]),
                 active=True,
+                code=row.get("code") or None,
+                is_default=(row.get("is_default", "").strip().lower() == "true"),
             )
             for row in csv.DictReader(f)
         ]

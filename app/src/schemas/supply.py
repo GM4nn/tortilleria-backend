@@ -4,6 +4,9 @@ from datetime import date, datetime
 # pydantic
 from pydantic import BaseModel, ConfigDict, Field
 
+# app
+from app.src.schemas.pagination import Pagination
+
 
 class SupplyBase(BaseModel):
     supply_name: str = Field(min_length=1, max_length=100)
@@ -54,3 +57,26 @@ class SupplyPurchaseRead(BaseModel):
     created_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedSupplyPurchases(BaseModel):
+    pagination: Pagination
+    data: list[SupplyPurchaseRead]
+
+
+class SupplyPeriodRead(BaseModel):
+    from_date: date | None
+    to_date: date | None
+    compra: float
+    sobrante: float
+    disponible: float
+    consumido: float
+    restante: float
+    pct: float
+
+
+class PaginatedSupplyPeriods(BaseModel):
+    pagination: Pagination
+    data: list[SupplyPeriodRead]
+    current: SupplyPeriodRead | None = None
+    inventory: float = 0.0

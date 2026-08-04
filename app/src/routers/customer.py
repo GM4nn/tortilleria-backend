@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 # app
 from app.core.database import get_db
 from app.src.providers.customer import CustomerProvider
-from app.src.schemas.customer import CustomerCreate, CustomerRead, CustomerUpdate
+from app.src.schemas.customer import (
+    CustomerCreate,
+    CustomerRead,
+    CustomerUpdate,
+    PaginatedCustomers,
+)
 
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -16,6 +21,15 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 @router.get("", response_model=list[CustomerRead])
 def list_customers(db: Session = Depends(get_db)):
     return CustomerProvider(db).get_all()
+
+
+@router.get("/paginated", response_model=PaginatedCustomers)
+def list_customers_paginated(
+    offset: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+):
+    return CustomerProvider(db).get_all_paginated(offset=offset, limit=limit)
 
 
 @router.get("/{customer_id}", response_model=CustomerRead)

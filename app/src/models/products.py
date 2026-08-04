@@ -11,6 +11,10 @@ class Product(Base):
     name = Column(String, nullable=False)
     price = Column(Float, nullable=False)
     active = Column(Boolean, default=True)
+    # Código interno para identificar productos especiales (ej. la tortilla de kilo)
+    code = Column(String, nullable=True)
+    # Productos del sistema que no se pueden eliminar (usados por la lógica)
+    is_default = Column(Boolean, nullable=False, default=False)
 
     # Relationship
     # Al borrar un producto se borran los detalles de venta que lo referencian

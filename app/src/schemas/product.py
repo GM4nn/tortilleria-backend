@@ -21,5 +21,7 @@ class ProductRead(BaseModel):
     icon: str
     name: str
     price: float
+    code: str | None = None
+    is_default: bool = False
 
     model_config = ConfigDict(from_attributes=True)

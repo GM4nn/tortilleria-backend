@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 # app
 from app.core.constants import CUSTOMER_CATEGORY_MOSTRADOR, mexico_now
 from app.src.models import Customer
-from app.src.schemas.customer import CustomerCreate, CustomerUpdate
+from app.src.providers.pagination import PaginationProvider
+from app.src.schemas.customer import CustomerCreate, CustomerUpdate, PaginatedCustomers
 
 
 class CustomerProvider:
@@ -12,11 +13,29 @@ class CustomerProvider:
     def __init__(self, db_session: Session) -> None:
         self._db_session: Session = db_session
 
+    def _visible_filters(self):
+        # Clientes visibles en el directorio (el Mostrador queda oculto con active2=False)
+        return [Customer.active.is_(True), Customer.active2.is_(True)]
+
     def get_all(self) -> list[Customer]:
         return self._db_session.query(Customer).filter(
-            Customer.active.is_(True),
-            Customer.active2.is_(True),
+            *self._visible_filters()
         ).order_by(Customer.customer_name).all()
+
+    def get_all_paginated(self, offset: int = 0, limit: int = 10) -> PaginatedCustomers:
+        filters = self._visible_filters()
+        pagination = PaginationProvider(self._db_session).get_pagination_data(
+            Customer, offset, limit, filters
+        )
+        data = (
+            self._db_session.query(Customer)
+            .filter(*filters)
+            .order_by(Customer.customer_name)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return PaginatedCustomers(pagination=pagination, data=data)
 
     def get_mostrador(self) -> Customer:
         # El Mostrador vive oculto (active2=False); se busca por categoría, no por la lista

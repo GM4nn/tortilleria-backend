@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 # app
 from app.core.constants import mexico_now
 from app.src.models import Supplier
-from app.src.schemas.supplier import SupplierCreate, SupplierUpdate
+from app.src.providers.pagination import PaginationProvider
+from app.src.schemas.supplier import PaginatedSuppliers, SupplierCreate, SupplierUpdate
 
 
 class SupplierProvider:
@@ -16,6 +17,21 @@ class SupplierProvider:
         return self._db_session.query(Supplier).filter(
             Supplier.active.is_(True)
         ).order_by(Supplier.supplier_name).all()
+
+    def get_all_paginated(self, offset: int = 0, limit: int = 10) -> PaginatedSuppliers:
+        filters = [Supplier.active.is_(True)]
+        pagination = PaginationProvider(self._db_session).get_pagination_data(
+            Supplier, offset, limit, filters
+        )
+        data = (
+            self._db_session.query(Supplier)
+            .filter(*filters)
+            .order_by(Supplier.supplier_name)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return PaginatedSuppliers(pagination=pagination, data=data)
 
     def get_by_id(self, supplier_id: int) -> Supplier:
         supplier = self._db_session.query(Supplier).filter(

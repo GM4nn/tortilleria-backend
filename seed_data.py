@@ -1,10 +1,15 @@
 """Datos de prueba para la SQLite de FastAPI.
 
-BORRA TODO y recrea desde cero: esquema + base (clientes, productos,
-repartidores) + ~6.5 meses de pedidos con estados/pagos/repartidores variados
-(para probar filtros y paginación).
+BORRA TODO y recrea desde cero:
+  1. Limpia todas las filas.
+  2. Carga los DEFAULTS reales con run_bootstrap() (productos, Cliente Mostrador
+     oculto, insumos default Luz/Gas + insumos normales).
+  3. Agrega datos EXTRA de prueba: clientes, repartidores, proveedores, ~6.5
+     meses de pedidos (con estados/pagos/repartidores/devoluciones variados),
+     ventas de mostrador, cortes de caja y compras de insumos.
 
 Uso (desde backend/, con el venv activado):
+    alembic upgrade head   # solo si el esquema no existe
     python seed_data.py
 """
 
@@ -15,6 +20,7 @@ from sqlalchemy import func, inspect
 
 import app.src.models  # noqa: F401  (registra TODAS las tablas en la metadata)
 from app.core.base import Base
+from app.core.bootstrap import run_bootstrap
 from app.core.config import settings
 from app.core.database import SessionLocal, engine
 from app.src.models import (
@@ -23,9 +29,13 @@ from app.src.models import (
     Dealer,
     Order,
     OrderDetail,
+    OrderRefund,
     Product,
     Sale,
     SaleDetail,
+    Supplier,
+    Supply,
+    SupplyPurchase,
 )
 
 random.seed(42)
@@ -34,6 +44,7 @@ DAYS_BACK = 195  # ~6.5 meses
 END_DATE = date.today()
 START_DATE = END_DATE - timedelta(days=DAYS_BACK)
 
+# Clientes extra (el Cliente Mostrador lo crea el bootstrap, oculto)
 CUSTOMERS = [
     ("Abarrotes Don José", "Tienda"),
     ("Cocina Doña María", "Comedor"),
@@ -44,16 +55,6 @@ CUSTOMERS = [
     ("Taquería Los Amigos", "Comedor"),
     ("Tienda La Esquina", "Tienda"),
     ("Tiendita Lupita", "Tienda"),
-    ("Cliente Mostrador", "Mostrador"),
-]
-
-PRODUCTS = [
-    ("🌽", "Tortilla Kilo", 23.0),
-    ("🫓", "Tortilla de Harina", 35.0),
-    ("🥙", "Tostada", 18.0),
-    ("🌮", "Totopos", 40.0),
-    ("🧀", "Sope", 5.0),
-    ("🫔", "Gordita", 8.0),
 ]
 
 DEALERS = [
@@ -61,6 +62,21 @@ DEALERS = [
     ("beto", "5678", "Beto"),
     ("juanito", "1111", "Juanito"),
     ("laura", "2222", "Laura"),
+]
+
+# Proveedores extra (además de los default Luz CFE / Gas Nieto del bootstrap)
+EXTRA_SUPPLIERS = [
+    ("Molino San Juan", "Maíz"),
+    ("Harinera del Norte", "Harina"),
+    ("Distribuidora El Campo", "Insumos"),
+]
+
+REFUND_NOTES = [
+    "Producto en mal estado",
+    "Cliente devolvió excedente",
+    "Error en el pedido",
+    "Tortilla quemada",
+    None,
 ]
 
 QUANTITIES = [0.5, 1, 1.5, 2, 3, 5, 10, 15]
@@ -87,15 +103,26 @@ def reset_data(db) -> None:
 def seed_base(db):
     for name, category in CUSTOMERS:
         db.add(Customer(customer_name=name, customer_category=category))
-    for icon, name, price in PRODUCTS:
-        db.add(Product(icon=icon, name=name, price=price))
     for username, pin, name in DEALERS:
         db.add(Dealer(username=username, pin=pin, name=name))
+    for name, ptype in EXTRA_SUPPLIERS:
+        db.add(Supplier(supplier_name=name, product_type=ptype, active=True))
     db.commit()
-    return db.query(Customer).all(), db.query(Product).all(), db.query(Dealer).all()
+    # customers/products/suppliers incluyen lo del bootstrap (mostrador, productos, insumos)
+    return (
+        db.query(Customer).all(),
+        db.query(Product).all(),
+        db.query(Dealer).all(),
+    )
 
 
 def seed_orders(db, customers, products, dealers) -> None:
+    # Los pedidos van a clientes reales (no al Mostrador)
+    order_customers = [c for c in customers if (c.customer_category or "").lower() != "mostrador"]
+    if not order_customers or not products:
+        print("  Sin clientes/productos; no se generan pedidos.")
+        return
+
     max_items = min(4, len(products))
     dealer_usernames = [d.username for d in dealers] + [None, None]  # ~33% sin asignar
     order_count = 0
@@ -108,7 +135,7 @@ def seed_orders(db, customers, products, dealers) -> None:
         num_orders = random.choices([0, 1, 2, 3], weights=weights)[0]
 
         for _ in range(num_orders):
-            customer = random.choice(customers)
+            customer = random.choice(order_customers)
             dt = random_time(d)
 
             selected = random.sample(products, random.randint(1, max_items))
@@ -178,6 +205,28 @@ def seed_orders(db, customers, products, dealers) -> None:
     print(f"  Pagados: {paid}  ·  pendientes sin pagar: {pending}  ·  parciales: {partial}")
 
 
+def seed_refunds(db) -> None:
+    # ~15% de los pedidos completados tienen una devolución (pérdida)
+    completed = db.query(Order).filter(Order.status == "completado").all()
+    refunded = 0
+    for order in completed:
+        if random.random() > 0.15 or not order.order_details:
+            continue
+        detail = random.choice(order.order_details)
+        max_qty = detail.quantity
+        qty = round(random.uniform(0.5, max_qty), 2) if max_qty >= 0.5 else max_qty
+        db.add(OrderRefund(
+            order_id=order.id,
+            product_id=detail.product_id,
+            quantity=qty,
+            comments=random.choice(REFUND_NOTES),
+            created_at=order.completed_at or order.date,
+        ))
+        refunded += 1
+    db.commit()
+    print(f"  Devoluciones creadas: {refunded}")
+
+
 def seed_sales(db, mostrador, products) -> None:
     if mostrador is None or not products:
         print("  Sin cliente mostrador o productos; no se generan ventas.")
@@ -226,6 +275,42 @@ def seed_sales(db, mostrador, products) -> None:
 
     db.commit()
     print(f"  Ventas creadas: {sale_count}")
+
+
+def seed_supply_purchases(db) -> None:
+    supplies = db.query(Supply).all()
+    suppliers = db.query(Supplier).all()
+    if not supplies or not suppliers:
+        print("  Sin insumos/proveedores; no se generan compras.")
+        return
+
+    count = 0
+    for supply in supplies:
+        supplier = supply.supplier or random.choice(suppliers)
+        n = random.randint(3, 5)
+        dates = sorted(
+            END_DATE - timedelta(days=random.randint(1, DAYS_BACK)) for _ in range(n)
+        )
+        remaining = 0.0  # la primera compra no tiene sobrante previo
+        for pdate in dates:
+            qty = random.choice([20, 25, 30, 40, 50])
+            unit_price = round(random.uniform(5, 25), 2)
+            db.add(SupplyPurchase(
+                supply_id=supply.id,
+                supplier_id=supplier.id,
+                purchase_date=pdate,
+                quantity=qty,
+                unit=supply.unit,
+                unit_price=unit_price,
+                total_price=round(qty * unit_price, 2),
+                remaining=round(remaining, 2),
+                notes=None,
+            ))
+            remaining = round(random.uniform(0, qty * 0.3), 2)  # sobra para el próximo periodo
+            count += 1
+
+    db.commit()
+    print(f"  Compras de insumos creadas: {count}")
 
 
 def seed_cash_cuts(db) -> None:
@@ -312,12 +397,22 @@ def main() -> None:
         print("\nEl esquema no existe. Corre primero:  alembic upgrade head")
         return
 
+    print("\nBorrando datos anteriores...")
     with SessionLocal() as db:
-        print("\nBorrando datos anteriores...")
         reset_data(db)
 
+    print("Cargando defaults (bootstrap)...")
+    run_bootstrap()
+
+    with SessionLocal() as db:
         customers, products, dealers = seed_base(db)
-        print(f"  Base: {len(customers)} clientes, {len(products)} productos, {len(dealers)} repartidores")
+        suppliers_count = db.query(Supplier).count()
+        supplies_count = db.query(Supply).count()
+        print(
+            f"  Base: {len(customers)} clientes, {len(products)} productos, "
+            f"{len(dealers)} repartidores, {suppliers_count} proveedores, "
+            f"{supplies_count} insumos"
+        )
 
         mostrador = next(
             (c for c in customers if (c.customer_category or "").lower() == "mostrador"),
@@ -327,8 +422,14 @@ def main() -> None:
         print("\nGenerando pedidos...")
         seed_orders(db, customers, products, dealers)
 
+        print("\nGenerando devoluciones...")
+        seed_refunds(db)
+
         print("\nGenerando ventas de mostrador...")
         seed_sales(db, mostrador, products)
+
+        print("\nGenerando compras de insumos...")
+        seed_supply_purchases(db)
 
         print("\nGenerando cortes de caja...")
         seed_cash_cuts(db)

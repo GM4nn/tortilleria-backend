@@ -17,9 +17,9 @@ def today_summary(db: Session = Depends(get_db)):
     return ReportProvider(db).today_summary()
 
 
-@router.get("/top-products", description="Productos más vendidos")
-def top_products(limit: int = 5, db: Session = Depends(get_db)):
-    return ReportProvider(db).top_products(limit)
+@router.get("/losses-total", description="Pérdidas: total de tortilla devuelta")
+def losses_total(db: Session = Depends(get_db)):
+    return ReportProvider(db).losses_total()
 
 
 @router.get("/top-customers", description="Clientes con más compras")
@@ -30,3 +30,13 @@ def top_customers(limit: int = 5, db: Session = Depends(get_db)):
 @router.get("/monthly-income", description="Ingresos del mes actual")
 def monthly_income(db: Session = Depends(get_db)):
     return ReportProvider(db).monthly_income()
+
+
+@router.get("/orders-breakdown", description="Conteo de pedidos por estado de entrega y pago")
+def orders_breakdown(db: Session = Depends(get_db)):
+    return ReportProvider(db).orders_breakdown()
+
+
+@router.get("/finance", description="Finanzas: ingresos, gastos y ganancia (semana y mes)")
+def finance(db: Session = Depends(get_db)):
+    return ReportProvider(db).finance()

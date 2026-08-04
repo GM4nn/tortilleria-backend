@@ -37,6 +37,9 @@ class ProductProvider:
         return product
 
     def delete(self, product_id: int) -> None:
-        self._db_session.delete(self.get_by_id(product_id))
+        product = self.get_by_id(product_id)
+        if product.is_default:
+            raise ValueError("No se puede eliminar un producto del sistema")
+        self._db_session.delete(product)
         self._db_session.commit()
         return {"message": "Producto eliminado correctamente"}

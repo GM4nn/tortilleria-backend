@@ -1,6 +1,9 @@
 # pydantic
 from pydantic import BaseModel, ConfigDict, Field
 
+# app
+from app.src.schemas.pagination import Pagination
+
 
 class CustomerBase(BaseModel):
     customer_name: str = Field(min_length=1, max_length=255)
@@ -27,3 +30,8 @@ class CustomerRead(BaseModel):
     customer_phone: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedCustomers(BaseModel):
+    pagination: Pagination
+    data: list[CustomerRead]

@@ -1,6 +1,9 @@
 # pydantic
 from pydantic import BaseModel, ConfigDict, Field
 
+# app
+from app.src.schemas.pagination import Pagination
+
 
 class SupplierBase(BaseModel):
     supplier_name: str = Field(min_length=1, max_length=100)
@@ -34,3 +37,8 @@ class SupplierRead(BaseModel):
     is_default: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedSuppliers(BaseModel):
+    pagination: Pagination
+    data: list[SupplierRead]

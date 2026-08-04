@@ -205,14 +205,15 @@ class OrderProvider:
     def complete_order(self, order_id: int, data: CompleteOrderInput) -> dict:
         order = self._get(order_id)
 
+        # Se puede completar aunque no esté pagado; el pago final es opcional
         if data.final_payment > 0:
-            order.amount_paid = (order.amount_paid or 0.0) + data.final_payment
-
-        if round(order.amount_paid or 0.0, 2) != round(order.total, 2):
-            raise ValueError(
-                f"El pedido no está completamente pagado. "
-                f"Pagado: ${order.amount_paid or 0.0:.2f}, Total: ${order.total:.2f}"
-            )
+            new_paid = (order.amount_paid or 0.0) + data.final_payment
+            if round(new_paid, 2) > round(order.total, 2):
+                restante = order.total - (order.amount_paid or 0.0)
+                raise ValueError(
+                    f"El pago excede el total del pedido. Restante: ${restante:.2f}"
+                )
+            order.amount_paid = new_paid
 
         for item in data.refund_items:
             self._db_session.add(OrderRefund(
