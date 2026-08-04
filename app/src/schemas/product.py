@@ -23,5 +23,6 @@ class ProductRead(BaseModel):
     price: float
     code: str | None = None
     is_default: bool = False
+    display_order: int = 100
 
     model_config = ConfigDict(from_attributes=True)

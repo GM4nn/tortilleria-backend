@@ -15,6 +15,8 @@ class Product(Base):
     code = Column(String, nullable=True)
     # Productos del sistema que no se pueden eliminar (usados por la lógica)
     is_default = Column(Boolean, nullable=False, default=False)
+    # Orden de visualización (menor = primero); nuevos productos van al final
+    display_order = Column(Integer, nullable=False, default=100)
 
     # Relationship
     # Al borrar un producto se borran los detalles de venta que lo referencian

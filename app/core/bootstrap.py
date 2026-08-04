@@ -34,6 +34,7 @@ def add_default_products(db: Session) -> None:
                 active=True,
                 code=row.get("code") or None,
                 is_default=(row.get("is_default", "").strip().lower() == "true"),
+                display_order=int(row.get("display_order") or 0),
             )
             for row in csv.DictReader(f)
         ]

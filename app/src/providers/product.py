@@ -1,4 +1,5 @@
 # sqlalchemy
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 # app
@@ -12,7 +13,9 @@ class ProductProvider:
         self._db_session: Session = db_session
 
     def get_all(self) -> list[Product]:
-        return self._db_session.query(Product).order_by(Product.name).all()
+        return self._db_session.query(Product).order_by(
+            Product.display_order, Product.name
+        ).all()
 
     def get_by_id(self, product_id: int) -> Product:
         product = self._db_session.query(Product).filter(Product.id == product_id).first()
@@ -21,7 +24,14 @@ class ProductProvider:
         return product
 
     def create(self, data: ProductCreate) -> Product:
-        product = Product(icon=data.icon, name=data.name, price=data.price)
+        # El orden se asigna solo: el nuevo producto va al final
+        next_order = (self._db_session.query(func.max(Product.display_order)).scalar() or 0) + 1
+        product = Product(
+            icon=data.icon,
+            name=data.name,
+            price=data.price,
+            display_order=next_order,
+        )
         self._db_session.add(product)
         self._db_session.commit()
         self._db_session.refresh(product)

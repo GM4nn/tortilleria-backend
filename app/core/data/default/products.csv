@@ -1,16 +1,16 @@
-id,icon,name,price,active,code,is_default
-1,🌮,Kilo de tortillas,25.50,true,TORTILLA_KILO,true
-2,🌽,Totopos,25.00,true,TOTOPOS,true
-3,🌮,Kilo de tortillas Con Papel,26.00,true,,false
-4,🥟,Kilo de masa,24.00,true,,false
-5,📄,Papel chico,0.50,true,,false
-6,📄,Papel grande,1.00,true,,false
-7,🛍,Bolsa bio,2.00,true,,false
-8,📐,Bolsa de totopos,25.00,true,,false
-9,🍚,Arroz rojo,27.00,true,,false
-10,🍚,Arroz blanco,27.00,true,,false
-11,🥜,Frijoles,27.00,true,,false
-12,🍲,Guisado,30.00,true,,false
-13,🌶,Salsa,25.00,true,,false
-14,🌶,Salsa macha,25.00,true,,false
-15,🌮,Tortilla fria,16.00,true,,false
+id,icon,name,price,active,code,is_default,display_order
+1,🌮,Kilo de tortillas,25.50,true,TORTILLA_KILO,true,1
+2,🥟,Kilo de masa,24.00,true,,false,2
+3,🌽,Totopos,25.00,true,TOTOPOS,true,3
+4,🌮,Tortilla fria,16.00,true,,false,4
+5,🌮,Kilo de tortillas Con Papel,26.00,true,,false,5
+6,📐,Bolsa de totopos,25.00,true,,false,6
+7,🌶,Salsa,25.00,true,,false,7
+8,🌶,Salsa macha,25.00,true,,false,8
+9,🍲,Guisado,30.00,true,,false,9
+10,🍚,Arroz rojo,27.00,true,,false,10
+11,🍚,Arroz blanco,27.00,true,,false,11
+12,🥜,Frijoles,27.00,true,,false,12
+13,📄,Papel chico,0.50,true,,false,13
+14,📄,Papel grande,1.00,true,,false,14
+15,🛍,Bolsa bio,2.00,true,,false,15
