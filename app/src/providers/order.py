@@ -75,7 +75,7 @@ class OrderProvider:
         if filters:
             query = query.filter(*filters)
 
-        query = query.order_by(Order.date.desc())
+        query = query.order_by(Order.date.desc(), Order.id.desc())
 
         if limit is not None:
             query = query.offset(offset).limit(limit)

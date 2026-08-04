@@ -10,5 +10,6 @@ from .ia import IAConfig
 from .customer_product_price import CustomerProductPrice
 from .cash_cut import CashCut
 from .dealers import Dealer
+from .users import User
 
-__all__ = ['Product', 'Customer', 'Sale', 'SaleDetail', 'Supplier', 'Supply', 'SupplyPurchase', 'Order', 'OrderDetail', 'OrderRefund', 'IAConfig', 'CustomerProductPrice', 'CashCut', 'Dealer']
+__all__ = ['Product', 'Customer', 'Sale', 'SaleDetail', 'Supplier', 'Supply', 'SupplyPurchase', 'Order', 'OrderDetail', 'OrderRefund', 'IAConfig', 'CustomerProductPrice', 'CashCut', 'Dealer', 'User']

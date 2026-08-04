@@ -1,7 +1,10 @@
 # fastapi
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+# auth
+from app.core.deps import get_current_user, require_api_key
 
 # contextlib
 from contextlib import asynccontextmanager
@@ -19,6 +22,7 @@ from app.core.bootstrap import run_bootstrap
 # routers
 from app.src.routers import (
     assistant,
+    auth,
     cash_cut,
     customer,
     customer_price,
@@ -30,6 +34,7 @@ from app.src.routers import (
     sale,
     supplier,
     supply,
+    user,
 )
 
 @asynccontextmanager
@@ -53,15 +58,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
-
 @app.exception_handler(ValueError)
 async def value_error_handler(_request: Request, exc: ValueError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-_routers = [
+# Auth es público (login)
+app.include_router(auth.router, prefix="/api")
+
+# Gestión de usuarios: protegida con API key (SECRET_KEY), no con sesión
+app.include_router(user.router, prefix="/api", dependencies=[Depends(require_api_key)])
+
+# El resto del API exige token JWT
+_protected_routers = [
     dealer,
     customer,
     customer_price,
@@ -76,8 +85,8 @@ _routers = [
     meta,
 ]
 
-for module in _routers:
-    app.include_router(module.router, prefix="/api")
+for module in _protected_routers:
+    app.include_router(module.router, prefix="/api", dependencies=[Depends(get_current_user)])
 
 
 @app.get(

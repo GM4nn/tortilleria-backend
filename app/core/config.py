@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # Asistente IA
     ANTHROPIC_API_KEY: str | None = None
 
+    # Autenticación (JWT)
+    SECRET_KEY: str = ""
+    TOKEN_EXPIRE_DAYS: int = 30
+
     @computed_field
     @property
     def DATABASE_URI(self) -> str:
