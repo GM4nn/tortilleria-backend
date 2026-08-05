@@ -150,9 +150,12 @@ class FirestoreService:
                 updated = False
 
                 amount_paid = data.get("amount_paid")
-                if amount_paid is not None and order.amount_paid != amount_paid:
-                    order.amount_paid = amount_paid
-                    updated = True
+                if amount_paid is not None:
+                    # Redondea a 2 decimales y no permite exceder el total del pedido
+                    amount_paid = min(round(float(amount_paid), 2), round(order.total, 2))
+                    if order.amount_paid != amount_paid:
+                        order.amount_paid = amount_paid
+                        updated = True
 
                 if data.get("default_dealer") != order.default_dealer:
                     order.default_dealer = data.get("default_dealer")
