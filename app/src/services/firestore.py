@@ -1,7 +1,16 @@
+# other libs
+import json
+
 # app
 from app.core.config import settings
-from app.core.constants import ORDER_STATUSES_PENDING
+from app.core.constants import ORDER_STATUSES_COMPLETE, ORDER_STATUSES_PENDING, mexico_now
+from app.core.database import SessionLocal
+from app.src.models import Order
+from app.src.services.ws_manager import ws_manager
 
+# firebase
+from firebase_admin import credentials, firestore
+import firebase_admin
 
 class FirestoreService:
     """Sincroniza datos hacia Firestore para la app móvil (repartidores y pedidos).
@@ -17,16 +26,18 @@ class FirestoreService:
         self._initialize()
 
     def _initialize(self) -> None:
-        if not settings.FIREBASE_CREDENTIALS_PATH:
+        # Se acepta el service account como JSON en texto plano (ideal para secrets)
+        # o como ruta a un archivo. Si no hay ninguno, queda desactivado.
+        if settings.FIREBASE_CREDENTIALS_JSON:
+            cred_source = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+        elif settings.FIREBASE_CREDENTIALS_PATH:
+            cred_source = settings.FIREBASE_CREDENTIALS_PATH
+        else:
             return
-        try:
-            import firebase_admin
-            from firebase_admin import credentials, firestore
 
+        try:
             if not firebase_admin._apps:
-                firebase_admin.initialize_app(
-                    credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-                )
+                firebase_admin.initialize_app(credentials.Certificate(cred_source))
             self._db = firestore.client()
             self._available = True
         except Exception as exc:  # noqa: BLE001
@@ -101,6 +112,70 @@ class FirestoreService:
             )
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] Error pago order #{order_id}: {exc}")
+
+    # -------- listener Firestore -> SQLite --------
+
+    def start_order_sync(self) -> None:
+        # Escucha cambios de pedidos en Firestore (abonos/estado/repartidor desde
+        # el móvil) y los refleja en la SQLite. Corre en un hilo en segundo plano.
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._orders_collection).on_snapshot(
+                self._on_orders_snapshot
+            )
+            print("[Firestore] Listener de pedidos activo")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] No se pudo iniciar el listener: {exc}")
+
+    def _on_orders_snapshot(self, _col_snapshot, changes, _read_time) -> None:
+        # Sesión propia porque el callback corre en un hilo aparte
+        db = SessionLocal()
+        changed = False
+        try:
+            for change in changes:
+                if change.type.name not in ("ADDED", "MODIFIED"):
+                    continue
+
+                data = change.document.to_dict() or {}
+                order_id = data.get("order_id")
+
+                if order_id is None:
+                    continue
+
+                order = db.query(Order).filter(Order.id == order_id).first()
+                if not order:
+                    continue
+
+                updated = False
+
+                amount_paid = data.get("amount_paid")
+                if amount_paid is not None and order.amount_paid != amount_paid:
+                    order.amount_paid = amount_paid
+                    updated = True
+
+                if data.get("default_dealer") != order.default_dealer:
+                    order.default_dealer = data.get("default_dealer")
+                    updated = True
+
+                new_status = data.get("status")
+                if new_status and new_status != order.status:
+                    order.status = new_status
+                    if new_status == ORDER_STATUSES_COMPLETE and not order.completed_at:
+                        order.completed_at = mexico_now()
+                    updated = True
+
+                if updated:
+                    db.commit()
+                    changed = True
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error sync -> SQLite: {exc}")
+        finally:
+            db.close()
+
+        # Avisa al frontend (una sola vez por lote) que hubo cambios
+        if changed:
+            ws_manager.notify("orders")
 
 
 firestore_service: FirestoreService = FirestoreService()

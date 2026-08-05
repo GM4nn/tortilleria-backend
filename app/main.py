@@ -24,6 +24,11 @@ from alembic import command
 # bootstrap (datos por defecto)
 from app.core.bootstrap import run_bootstrap
 
+# firestore + websocket
+from app.src.services.firestore import firestore_service
+from app.src.services.ws_manager import ws_manager
+from app.src.routers import ws
+
 # routers
 from app.src.routers import (
     assistant,
@@ -44,8 +49,12 @@ from app.src.routers import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+
     command.upgrade(Config("alembic.ini"), "head")
     run_bootstrap()
+    ws_manager.set_loop(asyncio.get_running_loop())
+    firestore_service.start_order_sync()
     yield
 
 app = FastAPI(
@@ -70,6 +79,9 @@ async def value_error_handler(_request: Request, exc: ValueError) -> JSONRespons
 
 # Auth es público (login)
 app.include_router(auth.router, prefix="/api")
+
+# WebSocket de pedidos (valida el token por query param dentro del endpoint)
+app.include_router(ws.router)
 
 # Gestión de usuarios: protegida con API key (SECRET_KEY), no con sesión
 app.include_router(user.router, prefix="/api", dependencies=[Depends(require_api_key)])

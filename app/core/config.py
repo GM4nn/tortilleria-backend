@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     # Firestore (sincronización con la app móvil)
     FIREBASE_CREDENTIALS_PATH: str | None = None
+    FIREBASE_CREDENTIALS_JSON: str | None = None  # el service account como JSON en texto plano
     DEALERS_COLLECTION: str = "dealers"
     ORDERS_COLLECTION: str = "orders"
 
