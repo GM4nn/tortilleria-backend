@@ -1,7 +1,7 @@
 id,icon,name,price,active,code,is_default,display_order
 1,🌮,Kilo de tortillas,25.50,true,TORTILLA_KILO,true,1
-2,🥟,Kilo de masa,24.00,true,,false,2
-3,🌽,Totopos,25.00,true,TOTOPOS,true,3
+2,🌽,Totopos,25.00,true,TOTOPOS,true,2
+3,🥟,Kilo de masa,24.00,true,,false,3
 4,🌮,Tortilla fria,16.00,true,,false,4
 5,🌮,Kilo de tortillas Con Papel,26.00,true,,false,5
 6,📐,Bolsa de totopos,25.00,true,,false,6

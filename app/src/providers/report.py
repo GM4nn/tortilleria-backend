@@ -13,7 +13,7 @@ from app.core.constants import (
     ORDER_STATUSES_PENDING,
     PRODUCT_CODE_TORTILLA_KILO,
 )
-from app.src.models import Customer, Order, OrderRefund, Product, Sale, SupplyPurchase
+from app.src.models import Customer, Order, OrderRefund, Product, Sale, Supply, SupplyPurchase
 
 
 class ReportProvider:
@@ -120,11 +120,76 @@ class ReportProvider:
             "income_total": sales_total + orders_total,
         }
 
-    def _finance_for(self, dt_start: datetime, date_start) -> dict:
-        # Ingresos: ventas de mostrador + pedidos completados y totalmente pagados
+    def finance(self) -> dict:
+        # "Desde tu última compra": por cada insumo se toma su compra más reciente
+        # (el inventario actual y lo que costó). Los ingresos se cuentan desde que
+        # empezó este ciclo de inventario (la más antigua de esas últimas compras)
+        # para decidir si conviene reinvertir/recomprar.
+        today = mexico_now().date()
+
+        # Los insumos default (luz, gas) se omiten por ahora
+        supplies = (
+            self._db_session.query(Supply)
+            .filter(Supply.is_default.is_(False))
+            .order_by(Supply.supply_name)
+            .all()
+        )
+
+        items: list[dict] = []
+        for supply in supplies:
+            last = (
+                self._db_session.query(SupplyPurchase)
+                .filter(SupplyPurchase.supply_id == supply.id)
+                .order_by(
+                    SupplyPurchase.purchase_date.desc(),
+                    SupplyPurchase.id.desc(),
+                )
+                .first()
+            )
+            if not last:
+                continue
+
+            days_since = (today - last.purchase_date).days
+            # Si la última compra tiene más de un mes, no se considera
+            if days_since > 30:
+                continue
+
+            items.append(
+                {
+                    "supply_name": supply.supply_name,
+                    "last_purchase_date": last.purchase_date.isoformat(),
+                    "days_since": days_since,
+                    "quantity": last.quantity,
+                    "unit": last.unit,
+                    "expense": last.total_price or 0.0,
+                }
+            )
+
+        # Sin compras registradas: estado vacío
+        if not items:
+            return {
+                "items": [],
+                "total_expense": 0.0,
+                "income_since": None,
+                "days_since": 0,
+                "sales_total": 0.0,
+                "orders_total": 0.0,
+                "income": 0.0,
+                "net": 0.0,
+                "margin": 0.0,
+            }
+
+        total_expense = sum(item["expense"] for item in items)
+
+        # Los ingresos se cuentan desde la compra MÁS RECIENTE (la última vez que
+        # salió dinero para insumos): así se compara el dinero "nuevo" ganado desde
+        # entonces contra lo que costaría volver a surtir.
+        income_since = max(item["last_purchase_date"] for item in items)
+        start = datetime.fromisoformat(income_since)
+
         sales_total = self._db_session.query(
             func.coalesce(func.sum(Sale.total), 0.0)
-        ).filter(Sale.date >= dt_start).scalar() or 0.0
+        ).filter(Sale.date >= start).scalar() or 0.0
 
         paid = func.coalesce(Order.amount_paid, 0.0)
         orders_total = self._db_session.query(
@@ -132,39 +197,26 @@ class ReportProvider:
         ).filter(
             Order.status == ORDER_STATUSES_COMPLETE,
             paid >= Order.total,
-            Order.completed_at >= dt_start,
+            Order.completed_at >= start,
         ).scalar() or 0.0
 
-        # Gastos: compras de insumos
-        expenses = self._db_session.query(
-            func.coalesce(func.sum(SupplyPurchase.total_price), 0.0)
-        ).filter(SupplyPurchase.purchase_date >= date_start).scalar() or 0.0
-
         income = sales_total + orders_total
-        net = income - expenses
+        net = income - total_expense
         margin = (net / income * 100) if income > 0 else 0.0
 
+        # Ordena los insumos por gasto (mayor primero)
+        items.sort(key=lambda item: item["expense"], reverse=True)
+
         return {
+            "items": items,
+            "total_expense": total_expense,
+            "income_since": income_since,
+            "days_since": (today - start.date()).days,
             "sales_total": sales_total,
             "orders_total": orders_total,
             "income": income,
-            "expenses": expenses,
             "net": net,
             "margin": margin,
-        }
-
-    def finance(self) -> dict:
-        now = mexico_now()
-        today = now.date()
-        week_start = today - timedelta(days=today.weekday())  # lunes de esta semana
-        month_start = today.replace(day=1)
-
-        week_dt = datetime(week_start.year, week_start.month, week_start.day)
-        month_dt = datetime(month_start.year, month_start.month, month_start.day)
-
-        return {
-            "week": self._finance_for(week_dt, week_start),
-            "month": self._finance_for(month_dt, month_start),
         }
 
     def orders_breakdown(self) -> dict:
