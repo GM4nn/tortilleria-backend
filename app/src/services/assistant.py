@@ -1,5 +1,6 @@
 # other libs
 import json
+import re
 
 # sqlalchemy
 from sqlalchemy import text
@@ -7,15 +8,20 @@ from sqlalchemy.orm import Session
 
 # app
 from app.core.config import settings
+from app.src.models import IAConfig
 
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-5"
 MAX_TOKENS = 1500
 
-DANGEROUS_KEYWORDS = [
-    "DROP", "DELETE", "INSERT", "UPDATE", "ALTER",
-    "CREATE", "TRUNCATE", "EXEC", "EXECUTE", ";--", "/*", "*/",
+# Palabras que modifican datos; se buscan como palabra completa para no chocar
+# con columnas como "created_at" (que contiene "CREATE").
+WRITE_KEYWORDS = [
+    "DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE", "TRUNCATE",
+    "EXEC", "EXECUTE", "REPLACE", "ATTACH", "DETACH", "PRAGMA", "VACUUM",
+    "GRANT", "REINDEX",
 ]
+WRITE_KEYWORDS_RE = re.compile(r"\b(" + "|".join(WRITE_KEYWORDS) + r")\b")
 
 SCHEMA_HINT = """
 Base de datos SQLite de una tortillería. Tablas y columnas:
@@ -43,11 +49,32 @@ class AssistantService:
     def __init__(self, db_session: Session) -> None:
         self._db_session: Session = db_session
 
+    def _api_key(self) -> str | None:
+        # Prioriza la key guardada en la DB (ia_config); si no, la del entorno
+        row = self._db_session.query(IAConfig).order_by(IAConfig.id.desc()).first()
+        if row and row.api_key:
+            return row.api_key
+        return settings.ANTHROPIC_API_KEY
+
     def _client(self):
-        if not settings.ANTHROPIC_API_KEY:
-            raise ValueError("Falta configurar ANTHROPIC_API_KEY")
+        api_key = self._api_key()
+        if not api_key:
+            raise ValueError("Falta configurar la API key de Anthropic")
         import anthropic
-        return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        return anthropic.Anthropic(api_key=api_key)
+
+    @staticmethod
+    def _extract_text(msg) -> str:
+        # La respuesta puede traer bloques de "thinking" antes del texto; tomamos
+        # solo los bloques de texto (no asumimos que content[0] sea el texto).
+        texts = [
+            block.text
+            for block in msg.content
+            if getattr(block, "type", None) == "text" and getattr(block, "text", None)
+        ]
+        if not texts:  # respaldo: cualquier bloque con texto
+            texts = [getattr(b, "text", "") or "" for b in msg.content]
+        return "".join(texts).strip()
 
     def _generate_sql(self, client, question: str) -> str:
         prompt = (
@@ -60,7 +87,7 @@ class AssistantService:
             max_tokens=MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = msg.content[0].text.strip()
+        raw = self._extract_text(msg)
         start = raw.find("{")
         end = raw.rfind("}")
         if start == -1 or end == -1:
@@ -68,10 +95,14 @@ class AssistantService:
         return json.loads(raw[start:end + 1])["query"]
 
     def _run_sql(self, query: str) -> list[dict]:
-        upper = query.upper()
-        if not upper.lstrip().startswith("SELECT"):
+        stripped = query.strip()
+        upper = stripped.upper()
+        # Solo lectura: SELECT o CTE (WITH ... SELECT)
+        if not (upper.startswith("SELECT") or upper.startswith("WITH")):
             raise ValueError("Solo se permiten consultas de lectura")
-        if any(word in upper for word in DANGEROUS_KEYWORDS):
+        if WRITE_KEYWORDS_RE.search(upper):
+            raise ValueError("Consulta no permitida")
+        if any(token in stripped for token in (";--", "/*", "*/")):
             raise ValueError("Consulta no permitida")
 
         rows = self._db_session.execute(text(query)).mappings().all()
@@ -90,7 +121,7 @@ class AssistantService:
             max_tokens=MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
         )
-        return msg.content[0].text.strip()
+        return self._extract_text(msg)
 
     def ask(self, question: str) -> str:
         client = self._client()

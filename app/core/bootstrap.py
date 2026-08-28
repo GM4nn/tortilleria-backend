@@ -9,10 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.constants import (
     CUSTOMER_CATEGORY_MOSTRADOR,
     CUSTOMER_MOSTRADOR_NAME,
-    SUPPLIER_PRODUCT_TYPE_SERVICE,
 )
 from app.core.database import SessionLocal
-from app.src.models import Customer, Product, Supplier, Supply
+from app.src.models import Customer, Product, Supply
 
 DEFAULT_DIR = Path(__file__).parent / "data" / "default"
 
@@ -61,45 +60,6 @@ def create_mostrador_customer(db: Session) -> None:
     db.commit()
 
 
-def ensure_default_supplies(db: Session) -> None:
-    path = DEFAULT_DIR / "default_supplies.csv"
-    if not path.exists():
-        return
-
-    with open(path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            if db.query(Supply).filter(
-                Supply.supply_name == row["supply_name"],
-                Supply.is_default.is_(True),
-            ).first():
-                continue
-
-            supplier = db.query(Supplier).filter(
-                Supplier.supplier_name == row["supplier_name"],
-                Supplier.is_default.is_(True),
-            ).first()
-            if not supplier:
-                supplier = Supplier(
-                    supplier_name=row["supplier_name"],
-                    product_type=SUPPLIER_PRODUCT_TYPE_SERVICE,
-                    active=True,
-                    is_default=True,
-                )
-                db.add(supplier)
-                db.flush()
-            elif not supplier.is_default:
-                supplier.is_default = True
-
-            db.add(Supply(
-                supply_name=row["supply_name"],
-                supplier_id=supplier.id,
-                unit=row["unit"],
-                is_default=True,
-            ))
-
-    db.commit()
-
-
 def add_default_supplies(db: Session) -> None:
     path = DEFAULT_DIR / "supplies.csv"
     if not path.exists():
@@ -125,7 +85,6 @@ def run_bootstrap() -> None:
     try:
         add_default_products(db)
         create_mostrador_customer(db)
-        ensure_default_supplies(db)   # Luz CFE / Gas Nieto (is_default, protegidos)
         add_default_supplies(db)      # insumos normales sin proveedor (deletables)
     finally:
         db.close()
