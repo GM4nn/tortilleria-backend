@@ -42,8 +42,6 @@ from app.src.routers import (
     product,
     report,
     sale,
-    supplier,
-    supply,
     user,
 )
 
@@ -106,12 +104,9 @@ _read_routers = [
 for module in _read_routers:
     app.include_router(module.router, prefix="/api", dependencies=[Depends(read_any_write_admin)])
 
-# Solo admin: precios personalizados, proveedores, insumos, reportes/finanzas,
-# asistente y meta
+# Solo admin: precios personalizados, reportes/finanzas, asistente y meta
 _admin_routers = [
     customer_price,
-    supplier,
-    supply,
     report,
     assistant,
     meta,

@@ -11,7 +11,7 @@ from app.core.constants import (
     CUSTOMER_MOSTRADOR_NAME,
 )
 from app.core.database import SessionLocal
-from app.src.models import Customer, Product, Supply
+from app.src.models import Customer, Product
 
 DEFAULT_DIR = Path(__file__).parent / "data" / "default"
 
@@ -60,31 +60,10 @@ def create_mostrador_customer(db: Session) -> None:
     db.commit()
 
 
-def add_default_supplies(db: Session) -> None:
-    path = DEFAULT_DIR / "supplies.csv"
-    if not path.exists():
-        return
-
-    with open(path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            if db.query(Supply).filter(Supply.supply_name == row["supply_name"]).first():
-                continue
-
-            db.add(Supply(
-                supply_name=row["supply_name"],
-                supplier_id=None,  # sin proveedor; se asigna despues
-                unit=row["unit"],
-                is_default=False,
-            ))
-
-    db.commit()
-
-
 def run_bootstrap() -> None:
     db = SessionLocal()
     try:
         add_default_products(db)
         create_mostrador_customer(db)
-        add_default_supplies(db)      # insumos normales sin proveedor (deletables)
     finally:
         db.close()

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import mexico_now
 from app.core.database import get_db
 from app.src.providers.report import ReportProvider
-from app.src.services.excel_export import build_sales_workbook
+from app.src.services.excel_export import build_insumos_template, build_sales_workbook
 
 # std
 from io import BytesIO
@@ -54,6 +54,11 @@ def orders_breakdown(db: Session = Depends(get_db)):
     return ReportProvider(db).orders_breakdown()
 
 
-@router.get("/finance", description="Finanzas: ingresos, gastos y ganancia (semana y mes)")
-def finance(db: Session = Depends(get_db)):
-    return ReportProvider(db).finance()
+@router.get("/insumos-template", description="Descarga la plantilla de insumos (Excel)")
+def insumos_template() -> StreamingResponse:
+    content = build_insumos_template()
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="plantilla-insumos.xlsx"'},
+    )

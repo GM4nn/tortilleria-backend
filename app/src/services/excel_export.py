@@ -6,6 +6,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
 # sqlalchemy
@@ -299,7 +300,6 @@ def _summary_sheet(ws: Worksheet, db: Session) -> None:
     today = rp.today_summary()
     monthly = rp.monthly_income()
     losses = rp.losses_total()
-    fin = rp.finance()
 
     _sheet_title(
         ws,
@@ -338,16 +338,6 @@ def _summary_sheet(ws: Worksheet, db: Session) -> None:
     r = kv(r, "Ingresos del mes", monthly["income_total"], money=True)
     r = kv(r, "Pedidos del mes", monthly["orders_count"])
     r = kv(r, "Kilos de tortilla devueltos", losses["month"])
-    r += 1
-
-    r = section(r, "Desde tu última compra de insumos")
-    if fin["income_since"]:
-        r = kv(r, "Fecha de la última compra", fin["income_since"])
-        r = kv(r, "Gasto en insumos", fin["total_expense"], money=True)
-        r = kv(r, "Has ganado desde entonces", fin["income"], money=True)
-        r = kv(r, "Diferencia", fin["net"], money=True)
-    else:
-        r = kv(r, "Sin compras de insumos recientes", "")
 
     _autosize(ws, [32, 20])
 
@@ -364,6 +354,67 @@ def build_sales_workbook(db: Session) -> bytes:
     _sales_sheet(wb.create_sheet("Ventas"), db, names)
     _orders_sheet(wb.create_sheet("Pedidos"), db, names)
     _products_sheet(wb.create_sheet("Productos"), db)
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def build_insumos_template() -> bytes:
+    """Plantilla de Excel para registrar insumos (compras y consumo)."""
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Insumos"
+
+    _sheet_title(
+        ws,
+        "Registro de insumos",
+        "Anota lo que compras y lo que consumes. Las filas en gris son ejemplos; puedes borrarlas.",
+        8,
+    )
+
+    headers = [
+        "Fecha", "Insumo", "Movimiento", "Cantidad", "Unidad",
+        "Precio unitario", "Total", "Notas",
+    ]
+    header_row = 4
+    for i, h in enumerate(headers, start=1):
+        ws.cell(row=header_row, column=i, value=h)
+    _style_header(ws, header_row, len(headers))
+
+    # Filas de ejemplo (en gris) para mostrar el formato
+    examples = [
+        ("01/08/2026", "Maíz", "Compra", 50, "kilos", 12.5, 625, "Costal grande"),
+        ("02/08/2026", "Maíz", "Consumo", 8, "kilos", None, None, "Producción del día"),
+        ("03/08/2026", "Cal", "Compra", 5, "kilos", 14, 70, ""),
+    ]
+    grey = Font(color="9CA3AF", italic=True)
+    r = header_row
+    for ex in examples:
+        r += 1
+        for i, val in enumerate(ex, start=1):
+            cell = ws.cell(row=r, column=i, value=val)
+            cell.font = grey
+            if i in (6, 7) and val is not None:
+                cell.number_format = _MONEY
+
+    # Listas desplegables para que sea consistente
+    dv_mov = DataValidation(type="list", formula1='"Compra,Consumo"', allow_blank=True)
+    ws.add_data_validation(dv_mov)
+    dv_mov.add(f"C{header_row + 1}:C1000")
+
+    dv_unit = DataValidation(
+        type="list",
+        formula1='"kilos,litros,piezas,costales,bultos,cajas,servicio"',
+        allow_blank=True,
+    )
+    ws.add_data_validation(dv_unit)
+    dv_unit.add(f"E{header_row + 1}:E1000")
+
+    _autosize(ws, [14, 20, 14, 12, 12, 16, 14, 30])
+    ws.freeze_panes = f"A{header_row + 1}"
 
     buffer = BytesIO()
     wb.save(buffer)

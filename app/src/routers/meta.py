@@ -12,8 +12,6 @@ from app.core.config import settings
 from app.core.constants import (
     CUSTOMER_CATEGORIES,
     PRODUCT_ICONS,
-    SUPPLIER_PRODUCT_TYPES,
-    SUPPLY_UNITS,
 )
 from app.core.database import get_db
 from app.src.models import IAConfig
@@ -30,8 +28,6 @@ class AnthropicKeyInput(BaseModel):
 def get_meta() -> dict:
     return {
         "customer_categories": CUSTOMER_CATEGORIES,
-        "supply_units": SUPPLY_UNITS,
-        "supplier_product_types": SUPPLIER_PRODUCT_TYPES,
         "product_icons": PRODUCT_ICONS,
     }
 

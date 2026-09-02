@@ -34,9 +34,6 @@ Base de datos SQLite de una tortillería. Tablas y columnas:
 - order_details(id, order_id, product_id, quantity, unit_price, subtotal)
 - order_refunds(id, order_id, product_id, quantity, comments, created_at)
 - dealers(id, username, pin, name, active)  -> repartidores; orders.default_dealer = dealers.username
-- suppliers(id, supplier_name, product_type, city, active)
-- supplies(id, supply_name, supplier_id, unit)
-- supply_purchases(id, supply_id, supplier_id, purchase_date, quantity, unit_price, total_price, remaining)
 - cash_cuts(id, closed_at, expected_total, declared_total, difference)
 
 Reglas: SOLO genera SQL SELECT. Usa JOINs cuando necesites datos de otra tabla.
