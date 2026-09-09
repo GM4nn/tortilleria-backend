@@ -24,9 +24,10 @@ from alembic import command
 # bootstrap (datos por defecto)
 from app.core.bootstrap import run_bootstrap
 
-# firestore + websocket
+# firestore + websocket + scheduler
 from app.src.services.firestore import firestore_service
 from app.src.services.ws_manager import ws_manager
+from app.src.services import scheduler
 from app.src.routers import ws
 
 # routers
@@ -41,7 +42,9 @@ from app.src.routers import (
     order,
     product,
     report,
+    route,
     sale,
+    scheduled_order,
     user,
 )
 
@@ -53,6 +56,7 @@ async def lifespan(app: FastAPI):
     run_bootstrap()
     ws_manager.set_loop(asyncio.get_running_loop())
     firestore_service.start_order_sync()
+    scheduler.start()  # jobs diarios: limpiar Firestore (00:00) + generar pedidos (05:00)
     yield
 
 app = FastAPI(
@@ -104,9 +108,11 @@ _read_routers = [
 for module in _read_routers:
     app.include_router(module.router, prefix="/api", dependencies=[Depends(read_any_write_admin)])
 
-# Solo admin: precios personalizados, reportes/finanzas, asistente y meta
+# Solo admin: precios personalizados, rutas/zonas, reportes/finanzas, asistente y meta
 _admin_routers = [
     customer_price,
+    route,
+    scheduled_order,
     report,
     assistant,
     meta,

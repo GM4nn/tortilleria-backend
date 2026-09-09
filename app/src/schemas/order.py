@@ -19,6 +19,7 @@ class OrderCreate(BaseModel):
     notes: str | None = None
     amount_paid: float = Field(default=0.0, ge=0)
     default_dealer: str | None = None
+    scheduled_order_id: int | None = None
     items: list[OrderItemInput] = Field(min_length=1)
 
 

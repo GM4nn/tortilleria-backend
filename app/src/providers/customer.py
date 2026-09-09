@@ -63,6 +63,9 @@ class CustomerProvider:
             customer_category=data.customer_category,
             customer_photo=data.customer_photo,
             customer_phone=data.customer_phone,
+            latitude=data.latitude,
+            longitude=data.longitude,
+            route_id=data.route_id,
         )
         self._db_session.add(customer)
         self._db_session.commit()
@@ -76,6 +79,9 @@ class CustomerProvider:
         customer.customer_category = data.customer_category
         customer.customer_photo = data.customer_photo
         customer.customer_phone = data.customer_phone
+        customer.latitude = data.latitude
+        customer.longitude = data.longitude
+        customer.route_id = data.route_id
         customer.updated_at = mexico_now()
         self._db_session.commit()
         self._db_session.refresh(customer)

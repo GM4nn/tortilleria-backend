@@ -74,6 +74,13 @@ class FirestoreService:
         amount_paid: float,
         created_at: str,
         default_dealer: str | None = None,
+        customer_lat: float | None = None,
+        customer_lng: float | None = None,
+        customer_direction: str | None = None,
+        route_id: int | None = None,
+        route_name: str | None = None,
+        route_color: str | None = None,
+        delivery_time: str | None = None,
     ) -> None:
         if not self._available:
             return
@@ -88,6 +95,14 @@ class FirestoreService:
                     "status": ORDER_STATUSES_PENDING,
                     "created_at": created_at,
                     "default_dealer": default_dealer,
+                    # Ubicación + ruta para el mapa del móvil
+                    "customer_lat": customer_lat,
+                    "customer_lng": customer_lng,
+                    "customer_direction": customer_direction,
+                    "route_id": route_id,
+                    "route_name": route_name,
+                    "route_color": route_color,
+                    "delivery_time": delivery_time,
                 }
             )
         except Exception as exc:  # noqa: BLE001
@@ -112,6 +127,36 @@ class FirestoreService:
             )
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] Error pago order #{order_id}: {exc}")
+
+    def sync_dealer(self, order_id: int, dealer: str | None) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._orders_collection).document(str(order_id)).update(
+                {"default_dealer": dealer}
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error repartidor order #{order_id}: {exc}")
+
+    def clear_orders(self) -> None:
+        """Borra TODAS las órdenes de Firestore (limpieza nocturna). La SQLite
+        conserva el historial; el móvil lee solo las del día."""
+        if not self._available:
+            return
+        try:
+            col = self._db.collection(self._orders_collection)
+            batch = self._db.batch()
+            count = 0
+            for doc in col.stream():
+                batch.delete(doc.reference)
+                count += 1
+                if count % 400 == 0:
+                    batch.commit()
+                    batch = self._db.batch()
+            batch.commit()
+            print(f"[Firestore] Órdenes limpiadas: {count}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error limpiando órdenes: {exc}")
 
     # -------- listener Firestore -> SQLite --------
 

@@ -175,12 +175,14 @@ class OrderProvider:
             notes=data.notes,
             amount_paid=data.amount_paid,
             default_dealer=data.default_dealer,
+            scheduled_order_id=data.scheduled_order_id,
         )
         order.order_details = details
         self._db_session.add(order)
         self._db_session.commit()
         self._db_session.refresh(order)
 
+        route = customer.route
         firestore_service.add_order(
             order_id=order.id,
             customer_name=customer.customer_name,
@@ -189,6 +191,12 @@ class OrderProvider:
             amount_paid=data.amount_paid,
             created_at=order.date.isoformat() if order.date else mexico_now().isoformat(),
             default_dealer=data.default_dealer,
+            customer_lat=customer.latitude,
+            customer_lng=customer.longitude,
+            customer_direction=customer.customer_direction,
+            route_id=customer.route_id,
+            route_name=route.name if route else None,
+            route_color=route.color if route else None,
         )
         return self._to_dict(order)
 

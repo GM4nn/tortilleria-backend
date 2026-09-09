@@ -11,6 +11,9 @@ class CustomerBase(BaseModel):
     customer_category: str | None = None
     customer_photo: str | None = None
     customer_phone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    route_id: int | None = None
 
 
 class CustomerCreate(CustomerBase):
@@ -28,6 +31,9 @@ class CustomerRead(BaseModel):
     customer_category: str | None
     customer_photo: str | None
     customer_phone: str | None
+    latitude: float | None
+    longitude: float | None
+    route_id: int | None
 
     model_config = ConfigDict(from_attributes=True)
 
