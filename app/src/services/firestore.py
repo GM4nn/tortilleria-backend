@@ -3,9 +3,15 @@ import json
 
 # app
 from app.core.config import settings
-from app.core.constants import ORDER_STATUSES_COMPLETE, ORDER_STATUSES_PENDING, mexico_now
+from app.core.constants import (
+    ORDER_STATUSES_COMPLETE,
+    ORDER_STATUSES_PENDING,
+    SHOP_LAT,
+    SHOP_LNG,
+    mexico_now,
+)
 from app.core.database import SessionLocal
-from app.src.models import Order
+from app.src.models import Order, OrderRefund
 from app.src.services.ws_manager import ws_manager
 
 # firebase
@@ -103,6 +109,9 @@ class FirestoreService:
                     "route_name": route_name,
                     "route_color": route_color,
                     "delivery_time": delivery_time,
+                    # Ubicación de la tienda (para ordenar la ruta por cercanía)
+                    "shop_lat": SHOP_LAT,
+                    "shop_lng": SHOP_LNG,
                 }
             )
         except Exception as exc:  # noqa: BLE001
@@ -158,6 +167,36 @@ class FirestoreService:
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] Error limpiando órdenes: {exc}")
 
+    def clear_stale_orders(self, keep_date_prefix: str) -> int:
+        """Borra de Firestore las órdenes que NO son del día indicado
+        (keep_date_prefix = 'YYYY-MM-DD'), dejando intactas las de hoy.
+
+        Sirve para auto-repararse si la limpieza de medianoche no corrió (backend
+        apagado/reiniciado): así, al generar los pedidos de hoy, no quedan los de
+        ayer sin completar mezclados con los nuevos."""
+        if not self._available:
+            return 0
+        removed = 0
+        try:
+            col = self._db.collection(self._orders_collection)
+            batch = self._db.batch()
+            n = 0
+            for doc in col.stream():
+                data = doc.to_dict() or {}
+                created = str(data.get("created_at") or "")
+                if not created.startswith(keep_date_prefix):
+                    batch.delete(doc.reference)
+                    removed += 1
+                    n += 1
+                    if n % 400 == 0:
+                        batch.commit()
+                        batch = self._db.batch()
+            batch.commit()
+            print(f"[Firestore] Órdenes obsoletas eliminadas: {removed}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error limpiando obsoletas: {exc}")
+        return removed
+
     # -------- listener Firestore -> SQLite --------
 
     def start_order_sync(self) -> None:
@@ -172,6 +211,53 @@ class FirestoreService:
             print("[Firestore] Listener de pedidos activo")
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] No se pudo iniciar el listener: {exc}")
+
+    @staticmethod
+    def _reconcile_items(db, order, items: list[dict], new_total: float) -> bool:
+        """Refleja en SQLite lo que el repartidor ajustó en el móvil al completar:
+        - quantity del detalle = kilos ENTREGADOS (bruto = entregado × precio)
+        - OrderRefund = kilos DEVUELTOS (para pérdidas)
+        - order.total = total NETO = Σ (entregado − devuelto) × precio
+        Devuelve True si hubo cambios reales (evita churn en pagos/otros updates)."""
+        details = {d.product_id: d for d in order.order_details}
+
+        changed = round(order.total or 0.0, 2) != round(new_total, 2)
+        if not changed:
+            for it in items:
+                d = details.get(it.get("product_id"))
+                qty = float(it.get("quantity") or 0.0)
+                if d is not None and abs((d.quantity or 0.0) - qty) > 1e-9:
+                    changed = True
+                    break
+        if not changed:
+            return False
+
+        # Entregado
+        for it in items:
+            d = details.get(it.get("product_id"))
+            if d is None:
+                continue
+            qty = float(it.get("quantity") or 0.0)
+            price = float(it.get("price") or d.unit_price or 0.0)
+            d.quantity = qty
+            d.unit_price = price
+            d.subtotal = round(qty * price, 2)
+
+        # Devoluciones (se reconstruyen desde 'returned')
+        db.query(OrderRefund).filter(OrderRefund.order_id == order.id).delete(
+            synchronize_session=False
+        )
+        for it in items:
+            ret = float(it.get("returned") or 0.0)
+            if ret > 0:
+                db.add(OrderRefund(
+                    order_id=order.id,
+                    product_id=it.get("product_id"),
+                    quantity=ret,
+                ))
+
+        order.total = round(new_total, 2)
+        return True
 
     def _on_orders_snapshot(self, _col_snapshot, changes, _read_time) -> None:
         # Sesión propia porque el callback corre en un hilo aparte
@@ -193,6 +279,14 @@ class FirestoreService:
                     continue
 
                 updated = False
+
+                # Kilos entregados / devoluciones / total (el repartidor los ajusta
+                # al completar en el móvil). Reconcilia detalles + devoluciones + total.
+                items = data.get("items")
+                new_total = data.get("total")
+                if items and new_total is not None:
+                    if self._reconcile_items(db, order, items, float(new_total)):
+                        updated = True
 
                 amount_paid = data.get("amount_paid")
                 if amount_paid is not None:

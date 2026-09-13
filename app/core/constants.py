@@ -40,5 +40,9 @@ PRODUCT_CODE_TORTILLA_KILO = "TORTILLA_KILO"
 PRODUCT_CODE_TOTOPOS = "TOTOPOS"
 PRODUCT_CODE_MASA_KILO = "MASA_KILO"
 
+# Ubicación de la tortillería (punto de partida para ordenar rutas por cercanía)
+SHOP_LAT = 20.560312
+SHOP_LNG = -100.3981438
+
 # Usuario con acceso total; los demás solo ven ventas, pedidos y caja
 USER_ADMIN = "admin"

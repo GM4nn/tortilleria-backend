@@ -12,6 +12,8 @@ from app.core.config import settings
 from app.core.constants import (
     CUSTOMER_CATEGORIES,
     PRODUCT_ICONS,
+    SHOP_LAT,
+    SHOP_LNG,
 )
 from app.core.database import get_db
 from app.src.models import IAConfig
@@ -29,6 +31,8 @@ def get_meta() -> dict:
     return {
         "customer_categories": CUSTOMER_CATEGORIES,
         "product_icons": PRODUCT_ICONS,
+        "shop_lat": SHOP_LAT,
+        "shop_lng": SHOP_LNG,
     }
 
 

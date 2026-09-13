@@ -16,6 +16,7 @@ from app.src.models import (
 from app.src.providers.order import OrderProvider
 from app.src.schemas.order import OrderCreate, OrderItemInput
 from app.src.schemas.scheduled_order import ScheduledOrderCreate, ScheduledOrderUpdate
+from app.src.services.firestore import firestore_service
 
 
 class ScheduledOrderProvider:
@@ -96,12 +97,31 @@ class ScheduledOrderProvider:
         return product.price if product else None
 
     def generate_todays_orders(self) -> dict:
-        """Crea los pedidos reales de hoy desde las plantillas activas. Idempotente."""
+        """Crea los pedidos reales de hoy desde las plantillas activas.
+
+        Idempotente y "solo hoy":
+        - Purga de Firestore cualquier pedido que NO sea de hoy (auto-repara si la
+          limpieza de medianoche no corrió), para que no queden los de ayer sin
+          completar mezclados con los nuevos.
+        - Idempotencia POR CLIENTE: si un cliente ya tiene un pedido hoy (de esta u
+          otra plantilla, o manual) no se le crea otro. Así nunca hay dos pedidos
+          del mismo cliente en el día.
+        """
         now = mexico_now()
         weekday = now.weekday()  # 0=lunes ... 6=domingo
         today = now.date()
         day_start = datetime(today.year, today.month, today.day)
         day_end = day_start + timedelta(days=1)
+
+        # Deja en Firestore SOLO las órdenes de hoy (borra las de ayer, etc.)
+        firestore_service.clear_stale_orders(today.isoformat())
+
+        # Clientes que YA tienen un pedido hoy (cualquier vía): no duplicarlos
+        rows = self._db_session.query(Order.customer_id).filter(
+            Order.date >= day_start,
+            Order.date < day_end,
+        ).all()
+        customers_with_order: set[int] = {r[0] for r in rows}
 
         scheduleds = self._db_session.query(ScheduledOrder).filter(
             ScheduledOrder.active.is_(True)
@@ -114,13 +134,8 @@ class ScheduledOrderProvider:
             if not day_items:
                 continue
 
-            # Idempotencia: ¿ya se generó hoy un pedido de esta plantilla?
-            already = self._db_session.query(Order).filter(
-                Order.scheduled_order_id == sched.id,
-                Order.date >= day_start,
-                Order.date < day_end,
-            ).first()
-            if already:
+            # Idempotencia por CLIENTE: si ya tiene un pedido hoy, no crear otro.
+            if sched.customer_id in customers_with_order:
                 skipped += 1
                 continue
 
@@ -145,6 +160,7 @@ class ScheduledOrderProvider:
                 scheduled_order_id=sched.id,
                 items=order_items,
             ))
+            customers_with_order.add(sched.customer_id)  # no duplicar en esta corrida
             created += 1
 
         return {"created": created, "skipped": skipped, "weekday": weekday}
