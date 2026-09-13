@@ -129,9 +129,17 @@ class ScheduledOrderProvider:
 
         created = 0
         skipped = 0
+        errors = 0
         for sched in scheduleds:
             day_items = [it for it in sched.items if it.weekday == weekday]
             if not day_items:
+                continue
+
+            # El cliente pudo haberse borrado/desactivado y dejar el programado
+            # huérfano: sáltalo en vez de reventar toda la generación.
+            customer = sched.customer
+            if customer is None or not getattr(customer, "active", True):
+                skipped += 1
                 continue
 
             # Idempotencia por CLIENTE: si ya tiene un pedido hoy, no crear otro.
@@ -151,16 +159,25 @@ class ScheduledOrderProvider:
                 continue
 
             dealer = sched.default_dealer
-            if not dealer and sched.customer and sched.customer.route:
-                dealer = sched.customer.route.dealer_username
+            if not dealer and customer.route:
+                dealer = customer.route.dealer_username
 
-            OrderProvider(self._db_session).create(OrderCreate(
-                customer_id=sched.customer_id,
-                default_dealer=dealer,
-                scheduled_order_id=sched.id,
-                items=order_items,
-            ))
+            try:
+                OrderProvider(self._db_session).create(OrderCreate(
+                    customer_id=sched.customer_id,
+                    default_dealer=dealer,
+                    scheduled_order_id=sched.id,
+                    items=order_items,
+                ))
+            except Exception as exc:  # noqa: BLE001
+                # Un programado con problema no debe tumbar los demás.
+                self._db_session.rollback()
+                errors += 1
+                print(f"[Programados] Error generando pedido de plantilla "
+                      f"#{sched.id} (cliente {sched.customer_id}): {exc}")
+                continue
+
             customers_with_order.add(sched.customer_id)  # no duplicar en esta corrida
             created += 1
 
-        return {"created": created, "skipped": skipped, "weekday": weekday}
+        return {"created": created, "skipped": skipped, "errors": errors, "weekday": weekday}

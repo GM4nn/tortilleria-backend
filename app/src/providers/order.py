@@ -191,6 +191,7 @@ class OrderProvider:
             amount_paid=data.amount_paid,
             created_at=order.date.isoformat() if order.date else mexico_now().isoformat(),
             default_dealer=data.default_dealer,
+            notes=data.notes,
             customer_lat=customer.latitude,
             customer_lng=customer.longitude,
             customer_direction=customer.customer_direction,

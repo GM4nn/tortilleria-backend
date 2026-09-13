@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.base import Base
 from app.core.constants import mexico_now
 
@@ -15,7 +15,11 @@ class ScheduledOrder(Base):
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=mexico_now)
 
-    customer = relationship('Customer')
+    # Al borrar el cliente se llevan también sus pedidos programados (cascada)
+    customer = relationship(
+        'Customer',
+        backref=backref('scheduled_orders', cascade='all, delete-orphan'),
+    )
     items = relationship(
         'ScheduledOrderItem',
         back_populates='scheduled_order',

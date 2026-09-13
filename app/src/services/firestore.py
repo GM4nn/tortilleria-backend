@@ -80,6 +80,7 @@ class FirestoreService:
         amount_paid: float,
         created_at: str,
         default_dealer: str | None = None,
+        notes: str | None = None,
         customer_lat: float | None = None,
         customer_lng: float | None = None,
         customer_direction: str | None = None,
@@ -101,6 +102,7 @@ class FirestoreService:
                     "status": ORDER_STATUSES_PENDING,
                     "created_at": created_at,
                     "default_dealer": default_dealer,
+                    "notes": notes or "",
                     # Ubicación + ruta para el mapa del móvil
                     "customer_lat": customer_lat,
                     "customer_lng": customer_lng,
@@ -299,6 +301,13 @@ class FirestoreService:
                 if data.get("default_dealer") != order.default_dealer:
                     order.default_dealer = data.get("default_dealer")
                     updated = True
+
+                # Notas/descripción escritas por el repartidor en el móvil
+                if "notes" in data:
+                    new_notes = data.get("notes") or None
+                    if new_notes != order.notes:
+                        order.notes = new_notes
+                        updated = True
 
                 new_status = data.get("status")
                 if new_status and new_status != order.status:
