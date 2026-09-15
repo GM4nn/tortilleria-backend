@@ -257,11 +257,12 @@ class OrderProvider:
         return self._to_dict(order)
 
     def apply_delivery(
-        self, order_id: int, items: list[dict], total: float, amount_paid: float
+        self, order_id: int, items: list[dict], total: float, amount_paid: float,
+        complete: bool = True,
     ) -> dict:
-        """Cierre de entrega desde el móvil: actualiza kilos entregados/devueltos
-        (crea el detalle si es un producto agregado), total neto, pago y marca
-        el pedido como completado."""
+        """Guarda la entrega desde el móvil: kilos entregados/devueltos (crea el
+        detalle si es un producto agregado), total neto y pago. Si complete=True
+        marca el pedido como completado; si es False solo guarda (sigue pendiente)."""
         order = self._get(order_id)
         details = {d.product_id: d for d in order.order_details}
 
@@ -299,9 +300,10 @@ class OrderProvider:
         order.total = round(float(total), 2)
         paid = min(round(float(amount_paid), 2), round(order.total, 2))
         order.amount_paid = paid if paid > 0 else 0.0
-        order.status = ORDER_STATUSES_COMPLETE
-        if not order.completed_at:
-            order.completed_at = mexico_now()
+        if complete:
+            order.status = ORDER_STATUSES_COMPLETE
+            if not order.completed_at:
+                order.completed_at = mexico_now()
         self._db_session.commit()
         ws_manager.notify("orders")
         return self._to_dict(order)
