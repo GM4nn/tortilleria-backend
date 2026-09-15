@@ -341,6 +341,7 @@ class FirestoreService:
             "icon": p.icon,
             "price": p.price,  # precio base; el precio por cliente va en el cliente
             "active": bool(p.active),
+            "is_default": bool(p.is_default),  # la móvil solo agrega los default
         }
 
     def upsert_product(self, product: Product) -> None:
