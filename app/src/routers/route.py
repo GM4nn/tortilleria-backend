@@ -19,7 +19,7 @@ router = APIRouter(prefix="/routes", tags=["routes"])
 
 @router.get("", response_model=list[RouteRead], description="Lista de rutas/zonas activas")
 def list_routes(db: Session = Depends(get_db)):
-    return RouteProvider(db).get_all()
+    return [RouteRead.from_route(r) for r in RouteProvider(db).get_all()]
 
 
 @router.post(
@@ -29,12 +29,12 @@ def list_routes(db: Session = Depends(get_db)):
     description="Crear una ruta/zona",
 )
 def create_route(data: RouteCreate, db: Session = Depends(get_db)):
-    return RouteProvider(db).create(data)
+    return RouteRead.from_route(RouteProvider(db).create(data))
 
 
 @router.put("/{route_id}", response_model=RouteRead, description="Actualizar una ruta/zona")
 def update_route(route_id: int, data: RouteUpdate, db: Session = Depends(get_db)):
-    return RouteProvider(db).update(route_id, data)
+    return RouteRead.from_route(RouteProvider(db).update(route_id, data))
 
 
 @router.delete(

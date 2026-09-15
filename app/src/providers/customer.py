@@ -70,6 +70,7 @@ class CustomerProvider:
         self._db_session.add(customer)
         self._db_session.commit()
         self._db_session.refresh(customer)
+        firestore_service.upsert_customer(customer)  # para el mapa del móvil
         return customer
 
     def update(self, customer_id: int, data: CustomerUpdate) -> Customer:
@@ -85,6 +86,7 @@ class CustomerProvider:
         customer.updated_at = mexico_now()
         self._db_session.commit()
         self._db_session.refresh(customer)
+        firestore_service.upsert_customer(customer)  # refleja ubicación/ruta en el mapa
         return customer
 
     def delete(self, customer_id: int) -> None:
@@ -92,3 +94,4 @@ class CustomerProvider:
         customer = self.get_by_id(customer_id)
         self._db_session.delete(customer)
         self._db_session.commit()
+        firestore_service.delete_customer(customer_id)

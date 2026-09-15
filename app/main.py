@@ -39,6 +39,7 @@ from app.src.routers import (
     customer_price,
     dealer,
     meta,
+    mobile,
     order,
     product,
     report,
@@ -55,8 +56,21 @@ async def lifespan(app: FastAPI):
     command.upgrade(Config("alembic.ini"), "head")
     run_bootstrap()
     ws_manager.set_loop(asyncio.get_running_loop())
-    firestore_service.start_order_sync()
     scheduler.start()  # jobs diarios: limpiar Firestore (00:00) + generar pedidos (05:00)
+
+    # Sincroniza clientes y rutas a Firestore (para el mapa del móvil) sin bloquear
+    def _initial_sync():
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            firestore_service.sync_all_products(db)
+            firestore_service.sync_all_routes(db)
+            firestore_service.sync_all_customers(db)
+        finally:
+            db.close()
+
+    import threading
+    threading.Thread(target=_initial_sync, daemon=True).start()
     yield
 
 app = FastAPI(
@@ -81,6 +95,9 @@ async def value_error_handler(_request: Request, exc: ValueError) -> JSONRespons
 
 # Auth es público (login)
 app.include_router(auth.router, prefix="/api")
+
+# App móvil: público, se valida con usuario+PIN del repartidor dentro del endpoint
+app.include_router(mobile.router, prefix="/api")
 
 # WebSocket de pedidos (valida el token por query param dentro del endpoint)
 app.include_router(ws.router)

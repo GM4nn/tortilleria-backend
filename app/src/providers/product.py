@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 # app
 from app.src.models import Product
 from app.src.schemas.product import ProductCreate, ProductUpdate
+from app.src.services.firestore import firestore_service
 
 
 class ProductProvider:
@@ -35,6 +36,7 @@ class ProductProvider:
         self._db_session.add(product)
         self._db_session.commit()
         self._db_session.refresh(product)
+        firestore_service.upsert_product(product)  # catálogo para la móvil
         return product
 
     def update(self, product_id: int, data: ProductUpdate) -> Product:
@@ -44,6 +46,7 @@ class ProductProvider:
         product.price = data.price
         self._db_session.commit()
         self._db_session.refresh(product)
+        firestore_service.upsert_product(product)
         return product
 
     def delete(self, product_id: int) -> None:
@@ -52,4 +55,5 @@ class ProductProvider:
             raise ValueError("No se puede eliminar un producto del sistema")
         self._db_session.delete(product)
         self._db_session.commit()
+        firestore_service.delete_product(product_id)
         return {"message": "Producto eliminado correctamente"}

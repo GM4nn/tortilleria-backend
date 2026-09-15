@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 # app
 from app.core.constants import mexico_now
 from app.src.models import (
+    Customer,
     CustomerProductPrice,
     Order,
     Product,
@@ -158,9 +159,13 @@ class ScheduledOrderProvider:
             if not order_items:
                 continue
 
+            # Repartidor: el explícito de la plantilla; si no, el de la ruta cuando
+            # es UNO solo. Si la ruta tiene varios, queda sin asignar y cualquiera
+            # de la ruta lo toma en el móvil.
             dealer = sched.default_dealer
             if not dealer and customer.route:
-                dealer = customer.route.dealer_username
+                route_dealers = customer.route.dealer_usernames
+                dealer = route_dealers[0] if len(route_dealers) == 1 else None
 
             try:
                 OrderProvider(self._db_session).create(OrderCreate(
@@ -181,3 +186,58 @@ class ScheduledOrderProvider:
             created += 1
 
         return {"created": created, "skipped": skipped, "errors": errors, "weekday": weekday}
+
+    def generate_for_customer(self, customer_id: int, dealer: str | None = None) -> dict:
+        """Genera el pedido de HOY para UN cliente (al tocarlo en gris en el mapa).
+        Usa su plantilla del día si la tiene; si no, crea un pedido vacío para
+        agregar productos a mano. Idempotente: si ya tiene pedido hoy, lo devuelve."""
+        now = mexico_now()
+        weekday = now.weekday()
+        today = now.date()
+        day_start = datetime(today.year, today.month, today.day)
+        day_end = day_start + timedelta(days=1)
+
+        existing = self._db_session.query(Order).filter(
+            Order.customer_id == customer_id,
+            Order.date >= day_start,
+            Order.date < day_end,
+        ).first()
+        if existing:
+            return {"created": False, "order_id": existing.id, "reason": "already"}
+
+        customer = self._db_session.query(Customer).filter(
+            Customer.id == customer_id
+        ).first()
+        if customer is None or not getattr(customer, "active", True):
+            raise ValueError("Cliente no encontrado o inactivo")
+
+        sched = self._db_session.query(ScheduledOrder).filter(
+            ScheduledOrder.customer_id == customer_id,
+            ScheduledOrder.active.is_(True),
+        ).first()
+
+        order_items: list[OrderItemInput] = []
+        if sched:
+            for it in sched.items:
+                if it.weekday != weekday:
+                    continue
+                price = self._resolve_price(customer_id, it.product_id)
+                if price is None or price <= 0:
+                    continue
+                order_items.append(OrderItemInput(
+                    product_id=it.product_id, quantity=it.quantity, unit_price=price,
+                ))
+
+        # Repartidor: el que lo solicitó; si no, la plantilla; si no, la ruta (si es 1)
+        resolved = dealer or (sched.default_dealer if sched else None)
+        if not resolved and customer.route:
+            rd = customer.route.dealer_usernames
+            resolved = rd[0] if len(rd) == 1 else None
+
+        order = OrderProvider(self._db_session).create(OrderCreate(
+            customer_id=customer_id,
+            default_dealer=resolved,
+            scheduled_order_id=sched.id if sched else None,
+            items=order_items,
+        ))
+        return {"created": True, "order_id": order["id"], "empty": not order_items}

@@ -15,10 +15,18 @@ from app.core.constants import (
     PAYMENT_STATUS_PARTIAL,
     PAYMENT_STATUS_PAID,
 )
-from app.src.models import Customer, Order, OrderDetail, OrderRefund, Product
+from app.src.models import (
+    Customer,
+    CustomerProductPrice,
+    Order,
+    OrderDetail,
+    OrderRefund,
+    Product,
+)
 from app.src.providers.pagination import PaginationProvider
 from app.src.schemas.order import CompleteOrderInput, OrderCreate, PaginatedOrders
 from app.src.services.firestore import firestore_service
+from app.src.services.ws_manager import ws_manager
 
 
 class OrderProvider:
@@ -59,6 +67,32 @@ class OrderProvider:
                 for r in order.refunds
             ],
         }
+
+    def build_catalog(self, customer_id: int) -> list[dict]:
+        """Catálogo de productos activos con el precio resuelto para el cliente
+        (precio personalizado si existe, si no el del producto). Se manda en el
+        doc del pedido para que el repartidor pueda AGREGAR productos en la móvil."""
+        products = (
+            self._db_session.query(Product)
+            .filter(Product.active.is_(True))
+            .order_by(Product.display_order, Product.name)
+            .all()
+        )
+        custom = {
+            c.product_id: c.custom_price
+            for c in self._db_session.query(CustomerProductPrice)
+            .filter(CustomerProductPrice.customer_id == customer_id)
+            .all()
+        }
+        return [
+            {
+                "product_id": p.id,
+                "name": p.name,
+                "icon": p.icon,
+                "price": custom.get(p.id, p.price),
+            }
+            for p in products
+        ]
 
     def _get(self, order_id: int) -> Order:
         order = self._db_session.query(Order).filter(Order.id == order_id).first()
@@ -186,6 +220,7 @@ class OrderProvider:
         firestore_service.add_order(
             order_id=order.id,
             customer_name=customer.customer_name,
+            customer_id=customer.id,
             items=fs_items,
             total=total,
             amount_paid=data.amount_paid,
@@ -198,7 +233,77 @@ class OrderProvider:
             route_id=customer.route_id,
             route_name=route.name if route else None,
             route_color=route.color if route else None,
+            route_dealers=route.dealer_usernames if route else [],
         )
+        return self._to_dict(order)
+
+    # -------- acciones desde la app móvil (guardan en SQLite; la móvil ya
+    # actualizó Firestore para el mapa en tiempo real) --------
+
+    def set_notes(self, order_id: int, notes: str | None) -> dict:
+        order = self._get(order_id)
+        order.notes = notes or None
+        self._db_session.commit()
+        ws_manager.notify("orders")
+        return self._to_dict(order)
+
+    def set_amount_paid(self, order_id: int, amount: float) -> dict:
+        """Fija el TOTAL pagado (no suma). Se topa entre 0 y el total del pedido."""
+        order = self._get(order_id)
+        paid = min(round(float(amount), 2), round(order.total, 2))
+        order.amount_paid = paid if paid > 0 else 0.0
+        self._db_session.commit()
+        ws_manager.notify("orders")
+        return self._to_dict(order)
+
+    def apply_delivery(
+        self, order_id: int, items: list[dict], total: float, amount_paid: float
+    ) -> dict:
+        """Cierre de entrega desde el móvil: actualiza kilos entregados/devueltos
+        (crea el detalle si es un producto agregado), total neto, pago y marca
+        el pedido como completado."""
+        order = self._get(order_id)
+        details = {d.product_id: d for d in order.order_details}
+
+        for it in items:
+            pid = it.get("product_id")
+            if pid is None:
+                continue
+            qty = float(it.get("quantity") or 0.0)
+            d = details.get(pid)
+            if d is None:
+                if qty <= 0:
+                    continue
+                price = float(it.get("price") or 0.0)
+                d = OrderDetail(product_id=pid, quantity=qty, unit_price=price,
+                                subtotal=round(qty * price, 2))
+                order.order_details.append(d)
+                details[pid] = d
+                continue
+            price = float(it.get("price") or d.unit_price or 0.0)
+            d.quantity = qty
+            d.unit_price = price
+            d.subtotal = round(qty * price, 2)
+
+        # Devoluciones (se reconstruyen desde 'returned')
+        self._db_session.query(OrderRefund).filter(
+            OrderRefund.order_id == order.id
+        ).delete(synchronize_session=False)
+        for it in items:
+            ret = float(it.get("returned") or 0.0)
+            if ret > 0:
+                self._db_session.add(OrderRefund(
+                    order_id=order.id, product_id=it.get("product_id"), quantity=ret,
+                ))
+
+        order.total = round(float(total), 2)
+        paid = min(round(float(amount_paid), 2), round(order.total, 2))
+        order.amount_paid = paid if paid > 0 else 0.0
+        order.status = ORDER_STATUSES_COMPLETE
+        if not order.completed_at:
+            order.completed_at = mexico_now()
+        self._db_session.commit()
+        ws_manager.notify("orders")
         return self._to_dict(order)
 
     def register_payment(self, order_id: int, amount: float) -> dict:
@@ -209,6 +314,7 @@ class OrderProvider:
         order.amount_paid = new_paid
         self._db_session.commit()
         firestore_service.sync_payment(order_id, new_paid)
+        ws_manager.notify("orders")
         return self._to_dict(order)
 
     def complete_order(self, order_id: int, data: CompleteOrderInput) -> dict:
@@ -236,6 +342,7 @@ class OrderProvider:
         order.completed_at = mexico_now()
         self._db_session.commit()
         firestore_service.update_order_status(order_id, ORDER_STATUSES_COMPLETE)
+        ws_manager.notify("orders")
         return self._to_dict(order)
 
     def cancel(self, order_id: int) -> dict:
@@ -243,4 +350,5 @@ class OrderProvider:
         order.status = ORDER_STATUSES_CANCEL
         self._db_session.commit()
         firestore_service.update_order_status(order_id, ORDER_STATUSES_CANCEL)
+        ws_manager.notify("orders")
         return self._to_dict(order)

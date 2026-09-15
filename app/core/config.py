@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_JSON: str | None = None  # el service account como JSON en texto plano
     DEALERS_COLLECTION: str = "dealers"
     ORDERS_COLLECTION: str = "orders"
+    CUSTOMERS_COLLECTION: str = "customers"
+    ROUTES_COLLECTION: str = "routes"
+    PRODUCTS_COLLECTION: str = "products"
 
     # Asistente IA
     ANTHROPIC_API_KEY: str | None = None

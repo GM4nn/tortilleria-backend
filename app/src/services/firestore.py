@@ -4,15 +4,11 @@ import json
 # app
 from app.core.config import settings
 from app.core.constants import (
-    ORDER_STATUSES_COMPLETE,
     ORDER_STATUSES_PENDING,
     SHOP_LAT,
     SHOP_LNG,
-    mexico_now,
 )
-from app.core.database import SessionLocal
-from app.src.models import Order, OrderRefund
-from app.src.services.ws_manager import ws_manager
+from app.src.models import Customer, Product, Route
 
 # firebase
 from firebase_admin import credentials, firestore
@@ -28,6 +24,9 @@ class FirestoreService:
         self._db = None
         self._dealers_collection: str = settings.DEALERS_COLLECTION
         self._orders_collection: str = settings.ORDERS_COLLECTION
+        self._customers_collection: str = settings.CUSTOMERS_COLLECTION
+        self._routes_collection: str = settings.ROUTES_COLLECTION
+        self._products_collection: str = settings.PRODUCTS_COLLECTION
         self._available: bool = False
         self._initialize()
 
@@ -79,6 +78,7 @@ class FirestoreService:
         total: float,
         amount_paid: float,
         created_at: str,
+        customer_id: int | None = None,
         default_dealer: str | None = None,
         notes: str | None = None,
         customer_lat: float | None = None,
@@ -87,6 +87,7 @@ class FirestoreService:
         route_id: int | None = None,
         route_name: str | None = None,
         route_color: str | None = None,
+        route_dealers: list[str] | None = None,
         delivery_time: str | None = None,
     ) -> None:
         if not self._available:
@@ -96,6 +97,7 @@ class FirestoreService:
                 {
                     "order_id": order_id,
                     "customer_name": customer_name,
+                    "customer_id": customer_id,
                     "items": items,
                     "total": total,
                     "amount_paid": amount_paid,
@@ -110,6 +112,7 @@ class FirestoreService:
                     "route_id": route_id,
                     "route_name": route_name,
                     "route_color": route_color,
+                    "route_dealers": route_dealers or [],
                     "delivery_time": delivery_time,
                     # Ubicación de la tienda (para ordenar la ruta por cercanía)
                     "shop_lat": SHOP_LAT,
@@ -148,6 +151,16 @@ class FirestoreService:
             )
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] Error repartidor order #{order_id}: {exc}")
+
+    def sync_route_dealers(self, order_id: int, dealers: list[str]) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._orders_collection).document(str(order_id)).update(
+                {"route_dealers": dealers or []}
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error route_dealers order #{order_id}: {exc}")
 
     def clear_orders(self) -> None:
         """Borra TODAS las órdenes de Firestore (limpieza nocturna). La SQLite
@@ -199,134 +212,170 @@ class FirestoreService:
             print(f"[Firestore] Error limpiando obsoletas: {exc}")
         return removed
 
-    # -------- listener Firestore -> SQLite --------
+    # -------- clientes / rutas (para el mapa del móvil) --------
 
-    def start_order_sync(self) -> None:
-        # Escucha cambios de pedidos en Firestore (abonos/estado/repartidor desde
-        # el móvil) y los refleja en la SQLite. Corre en un hilo en segundo plano.
+    def _customer_doc(self, c: Customer) -> dict:
+        route = c.route
+        # Precios personalizados del cliente {product_id: precio} (claves string
+        # porque Firestore no admite claves numéricas en un map).
+        prices = {
+            str(p.product_id): p.custom_price
+            for p in getattr(c, "product_prices", [])
+        }
+        return {
+            "id": c.id,
+            "name": c.customer_name,
+            "lat": c.latitude,
+            "lng": c.longitude,
+            "direction": c.customer_direction or "",
+            "route_id": c.route_id,
+            "route_name": route.name if route else None,
+            "route_color": route.color if route else None,
+            "route_dealers": route.dealer_usernames if route else [],
+            "prices": prices,
+            "active": bool(getattr(c, "active", True)),
+            "shop_lat": SHOP_LAT,
+            "shop_lng": SHOP_LNG,
+        }
+
+    def upsert_customer(self, customer: Customer) -> None:
         if not self._available:
             return
         try:
-            self._db.collection(self._orders_collection).on_snapshot(
-                self._on_orders_snapshot
-            )
-            print("[Firestore] Listener de pedidos activo")
+            self._db.collection(self._customers_collection).document(
+                str(customer.id)
+            ).set(self._customer_doc(customer))
         except Exception as exc:  # noqa: BLE001
-            print(f"[Firestore] No se pudo iniciar el listener: {exc}")
+            print(f"[Firestore] Error cliente #{customer.id}: {exc}")
 
-    @staticmethod
-    def _reconcile_items(db, order, items: list[dict], new_total: float) -> bool:
-        """Refleja en SQLite lo que el repartidor ajustó en el móvil al completar:
-        - quantity del detalle = kilos ENTREGADOS (bruto = entregado × precio)
-        - OrderRefund = kilos DEVUELTOS (para pérdidas)
-        - order.total = total NETO = Σ (entregado − devuelto) × precio
-        Devuelve True si hubo cambios reales (evita churn en pagos/otros updates)."""
-        details = {d.product_id: d for d in order.order_details}
-
-        changed = round(order.total or 0.0, 2) != round(new_total, 2)
-        if not changed:
-            for it in items:
-                d = details.get(it.get("product_id"))
-                qty = float(it.get("quantity") or 0.0)
-                if d is not None and abs((d.quantity or 0.0) - qty) > 1e-9:
-                    changed = True
-                    break
-        if not changed:
-            return False
-
-        # Entregado
-        for it in items:
-            d = details.get(it.get("product_id"))
-            if d is None:
-                continue
-            qty = float(it.get("quantity") or 0.0)
-            price = float(it.get("price") or d.unit_price or 0.0)
-            d.quantity = qty
-            d.unit_price = price
-            d.subtotal = round(qty * price, 2)
-
-        # Devoluciones (se reconstruyen desde 'returned')
-        db.query(OrderRefund).filter(OrderRefund.order_id == order.id).delete(
-            synchronize_session=False
-        )
-        for it in items:
-            ret = float(it.get("returned") or 0.0)
-            if ret > 0:
-                db.add(OrderRefund(
-                    order_id=order.id,
-                    product_id=it.get("product_id"),
-                    quantity=ret,
-                ))
-
-        order.total = round(new_total, 2)
-        return True
-
-    def _on_orders_snapshot(self, _col_snapshot, changes, _read_time) -> None:
-        # Sesión propia porque el callback corre en un hilo aparte
-        db = SessionLocal()
-        changed = False
+    def delete_customer(self, customer_id: int) -> None:
+        if not self._available:
+            return
         try:
-            for change in changes:
-                if change.type.name not in ("ADDED", "MODIFIED"):
-                    continue
-
-                data = change.document.to_dict() or {}
-                order_id = data.get("order_id")
-
-                if order_id is None:
-                    continue
-
-                order = db.query(Order).filter(Order.id == order_id).first()
-                if not order:
-                    continue
-
-                updated = False
-
-                # Kilos entregados / devoluciones / total (el repartidor los ajusta
-                # al completar en el móvil). Reconcilia detalles + devoluciones + total.
-                items = data.get("items")
-                new_total = data.get("total")
-                if items and new_total is not None:
-                    if self._reconcile_items(db, order, items, float(new_total)):
-                        updated = True
-
-                amount_paid = data.get("amount_paid")
-                if amount_paid is not None:
-                    # Redondea a 2 decimales y no permite exceder el total del pedido
-                    amount_paid = min(round(float(amount_paid), 2), round(order.total, 2))
-                    if order.amount_paid != amount_paid:
-                        order.amount_paid = amount_paid
-                        updated = True
-
-                if data.get("default_dealer") != order.default_dealer:
-                    order.default_dealer = data.get("default_dealer")
-                    updated = True
-
-                # Notas/descripción escritas por el repartidor en el móvil
-                if "notes" in data:
-                    new_notes = data.get("notes") or None
-                    if new_notes != order.notes:
-                        order.notes = new_notes
-                        updated = True
-
-                new_status = data.get("status")
-                if new_status and new_status != order.status:
-                    order.status = new_status
-                    if new_status == ORDER_STATUSES_COMPLETE and not order.completed_at:
-                        order.completed_at = mexico_now()
-                    updated = True
-
-                if updated:
-                    db.commit()
-                    changed = True
+            self._db.collection(self._customers_collection).document(
+                str(customer_id)
+            ).delete()
         except Exception as exc:  # noqa: BLE001
-            print(f"[Firestore] Error sync -> SQLite: {exc}")
-        finally:
-            db.close()
+            print(f"[Firestore] Error borrando cliente #{customer_id}: {exc}")
 
-        # Avisa al frontend (una sola vez por lote) que hubo cambios
-        if changed:
-            ws_manager.notify("orders")
+    def sync_all_customers(self, db) -> None:
+        if not self._available:
+            return
+        try:
+            customers = db.query(Customer).filter(Customer.active.is_(True)).all()
+            col = self._db.collection(self._customers_collection)
+            batch = self._db.batch()
+            n = 0
+            for c in customers:
+                batch.set(col.document(str(c.id)), self._customer_doc(c))
+                n += 1
+                if n % 400 == 0:
+                    batch.commit()
+                    batch = self._db.batch()
+            batch.commit()
+            print(f"[Firestore] Clientes sincronizados: {len(customers)}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error sincronizando clientes: {exc}")
+
+    def sync_route_customers(self, db, route_id: int) -> None:
+        """Re-sincroniza los clientes de una ruta (cuando cambia nombre/color/
+        repartidores de la ruta)."""
+        if not self._available:
+            return
+        try:
+            customers = db.query(Customer).filter(Customer.route_id == route_id).all()
+            for c in customers:
+                self.upsert_customer(c)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error sincronizando clientes de ruta {route_id}: {exc}")
+
+    def _route_doc(self, r: Route) -> dict:
+        return {
+            "id": r.id,
+            "name": r.name,
+            "color": r.color,
+            "dealers": r.dealer_usernames,
+            "active": bool(r.active),
+        }
+
+    def upsert_route(self, route: Route) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._routes_collection).document(str(route.id)).set(
+                self._route_doc(route)
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error ruta #{route.id}: {exc}")
+
+    def delete_route(self, route_id: int) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._routes_collection).document(
+                str(route_id)
+            ).delete()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error borrando ruta #{route_id}: {exc}")
+
+    def sync_all_routes(self, db) -> None:
+        if not self._available:
+            return
+        try:
+            routes = db.query(Route).filter(Route.active.is_(True)).all()
+            col = self._db.collection(self._routes_collection)
+            batch = self._db.batch()
+            for r in routes:
+                batch.set(col.document(str(r.id)), self._route_doc(r))
+            batch.commit()
+            print(f"[Firestore] Rutas sincronizadas: {len(routes)}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error sincronizando rutas: {exc}")
+
+    # -------- productos (catálogo global para "Agregar producto") --------
+
+    def _product_doc(self, p: Product) -> dict:
+        return {
+            "id": p.id,
+            "name": p.name,
+            "icon": p.icon,
+            "price": p.price,  # precio base; el precio por cliente va en el cliente
+            "active": bool(p.active),
+        }
+
+    def upsert_product(self, product: Product) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._products_collection).document(
+                str(product.id)
+            ).set(self._product_doc(product))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error producto #{product.id}: {exc}")
+
+    def delete_product(self, product_id: int) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._products_collection).document(
+                str(product_id)
+            ).delete()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error borrando producto #{product_id}: {exc}")
+
+    def sync_all_products(self, db) -> None:
+        if not self._available:
+            return
+        try:
+            products = db.query(Product).filter(Product.active.is_(True)).all()
+            col = self._db.collection(self._products_collection)
+            batch = self._db.batch()
+            for p in products:
+                batch.set(col.document(str(p.id)), self._product_doc(p))
+            batch.commit()
+            print(f"[Firestore] Productos sincronizados: {len(products)}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Firestore] Error sincronizando productos: {exc}")
 
 
 firestore_service: FirestoreService = FirestoreService()
