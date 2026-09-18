@@ -6,6 +6,7 @@ from app.core.constants import CUSTOMER_CATEGORY_MOSTRADOR, mexico_now
 from app.src.models import Customer
 from app.src.providers.pagination import PaginationProvider
 from app.src.schemas.customer import CustomerCreate, CustomerUpdate, PaginatedCustomers
+from app.src.services.firestore import firestore_service
 
 
 class CustomerProvider:
