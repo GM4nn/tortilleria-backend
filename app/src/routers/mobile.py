@@ -34,6 +34,7 @@ class DeliveryItemIn(BaseModel):
     quantity: float = 0
     returned: float = 0
     price: float = 0
+    grammage: float = 0
 
 
 class DeliveryInput(BaseModel):

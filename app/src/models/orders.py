@@ -52,6 +52,7 @@ class OrderDetail(Base):
     quantity = Column(Float, nullable=False)
     unit_price = Column(Float, nullable=False)  # Precio personalizado para este cliente
     subtotal = Column(Float, nullable=False)
+    grammage = Column(Float, default=0)  # Gramos por paquete (0 = no especificado)
 
     # Relationships
     order = relationship('Order', back_populates='order_details')

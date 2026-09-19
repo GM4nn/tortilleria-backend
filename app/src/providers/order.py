@@ -53,6 +53,7 @@ class OrderProvider:
                     "quantity": d.quantity,
                     "unit_price": d.unit_price,
                     "subtotal": d.subtotal,
+                    "grammage": d.grammage,
                 }
                 for d in order.order_details
             ],
@@ -190,6 +191,7 @@ class OrderProvider:
                 quantity=item.quantity,
                 unit_price=item.unit_price,
                 subtotal=subtotal,
+                grammage=item.grammage,
             ))
             fs_items.append({
                 "product_id": product.id,
@@ -197,6 +199,7 @@ class OrderProvider:
                 "price": item.unit_price,
                 "quantity": item.quantity,
                 "subtotal": subtotal,
+                "grammage": item.grammage,
             })
 
         if data.amount_paid > total:
@@ -276,8 +279,9 @@ class OrderProvider:
                 if qty <= 0:
                     continue
                 price = float(it.get("price") or 0.0)
+                gram = float(it.get("grammage") or 0)
                 d = OrderDetail(product_id=pid, quantity=qty, unit_price=price,
-                                subtotal=round(qty * price, 2))
+                                subtotal=round(qty * price, 2), grammage=gram)
                 order.order_details.append(d)
                 details[pid] = d
                 continue
@@ -285,6 +289,7 @@ class OrderProvider:
             d.quantity = qty
             d.unit_price = price
             d.subtotal = round(qty * price, 2)
+            d.grammage = float(it.get("grammage") or 0)
 
         # Devoluciones (se reconstruyen desde 'returned')
         self._db_session.query(OrderRefund).filter(

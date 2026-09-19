@@ -12,6 +12,7 @@ class OrderItemInput(BaseModel):
     product_id: int
     quantity: float = Field(gt=0)
     unit_price: float = Field(gt=0)
+    grammage: float = Field(default=0, ge=0)
 
 
 class OrderCreate(BaseModel):
@@ -20,7 +21,7 @@ class OrderCreate(BaseModel):
     amount_paid: float = Field(default=0.0, ge=0)
     default_dealer: str | None = None
     scheduled_order_id: int | None = None
-    items: list[OrderItemInput] = Field(min_length=1)
+    items: list[OrderItemInput] = Field(default_factory=list, min_length=0)
 
 
 class OrderDetailRead(BaseModel):
@@ -29,6 +30,7 @@ class OrderDetailRead(BaseModel):
     quantity: float
     unit_price: float
     subtotal: float
+    grammage: float = 0
 
 
 class OrderRefundRead(BaseModel):
