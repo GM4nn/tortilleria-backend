@@ -2,8 +2,9 @@
 from sqlalchemy.orm import Session
 
 # app
-from app.src.models import Customer, CustomerProductPrice
+from app.src.models import Customer, CustomerProductPrice, Order, OrderDetail
 from app.src.services.firestore import firestore_service
+from app.core.constants import ORDER_STATUSES_PENDING
 
 
 class CustomerPriceProvider:
@@ -17,7 +18,6 @@ class CustomerPriceProvider:
         ).all()
 
     def _sync_customer(self, customer_id: int) -> None:
-        # Refleja el precio por cliente en Firestore (map 'prices' del cliente)
         customer = self._db_session.query(Customer).filter(
             Customer.id == customer_id
         ).first()
@@ -32,18 +32,34 @@ class CustomerPriceProvider:
 
         if existing:
             existing.custom_price = price
-            self._db_session.commit()
-            self._db_session.refresh(existing)
-            self._sync_customer(customer_id)
-            return existing
+        else:
+            existing = CustomerProductPrice(
+                customer_id=customer_id,
+                product_id=product_id,
+                custom_price=price,
+            )
+            self._db_session.add(existing)
 
-        record = CustomerProductPrice(
-            customer_id=customer_id,
-            product_id=product_id,
-            custom_price=price,
-        )
-        self._db_session.add(record)
         self._db_session.commit()
-        self._db_session.refresh(record)
+        self._db_session.refresh(existing)
+
+        # Actualizar OrderDetail.unit_price de pedidos PENDIENTES
+        pending = self._db_session.query(Order).filter(
+            Order.customer_id == customer_id,
+            Order.status == ORDER_STATUSES_PENDING,
+        ).all()
+        for order in pending:
+            changed = False
+            for detail in order.order_details:
+                if detail.product_id == product_id:
+                    detail.unit_price = price
+                    detail.subtotal = round(detail.quantity * price, 2)
+                    changed = True
+            if changed:
+                order.total = round(
+                    sum(d.subtotal for d in order.order_details), 2
+                )
+        self._db_session.commit()
+
         self._sync_customer(customer_id)
-        return record
+        return existing
