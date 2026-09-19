@@ -24,6 +24,24 @@ class CustomerPriceProvider:
         if customer:
             firestore_service.upsert_customer(customer)
 
+    def _sync_order(self, order: Order) -> None:
+        if not order.customer:
+            return
+        fs_items = [
+            {
+                "product_id": d.product_id,
+                "name": d.product.name if d.product else "N/A",
+                "price": d.unit_price,
+                "quantity": d.quantity,
+                "subtotal": d.subtotal,
+                "grammage": d.grammage,
+            }
+            for d in order.order_details
+        ]
+        firestore_service.sync_order_items(
+            order.id, fs_items, order.total
+        )
+
     def save_price(self, customer_id: int, product_id: int, price: float) -> CustomerProductPrice:
         existing = self._db_session.query(CustomerProductPrice).filter(
             CustomerProductPrice.customer_id == customer_id,
@@ -59,6 +77,7 @@ class CustomerPriceProvider:
                 order.total = round(
                     sum(d.subtotal for d in order.order_details), 2
                 )
+                self._sync_order(order)
         self._db_session.commit()
 
         self._sync_customer(customer_id)

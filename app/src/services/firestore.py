@@ -122,6 +122,16 @@ class FirestoreService:
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] Error order #{order_id}: {exc}")
 
+    def sync_order_items(self, order_id: int, items: list[dict], total: float) -> None:
+        if not self._available:
+            return
+        try:
+            self._db.collection(self._orders_collection).document(
+                str(order_id)
+            ).update({"items": items, "total": total})
+        except Exception as exc:
+            print(f"[Firestore] Error items order #{order_id}: {exc}")
+
     def update_order_status(self, order_id: int, status: str) -> None:
         if not self._available:
             return
