@@ -67,3 +67,8 @@ def order_complete(order_id: int, data: DeliveryInput, db: Session = Depends(get
     return OrderProvider(db).apply_delivery(
         order_id, items, data.total, data.amount_paid, complete=data.complete
     )
+
+
+@router.get("/pending-orders", description="Órdenes pendientes de entrega o pago parcial (semanas anteriores)")
+def pending_orders(db: Session = Depends(get_db)):
+    return OrderProvider(db).get_pending_delivery()

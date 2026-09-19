@@ -366,3 +366,11 @@ class OrderProvider:
         firestore_service.update_order_status(order_id, ORDER_STATUSES_CANCEL)
         ws_manager.notify("orders")
         return self._to_dict(order)
+
+    def get_pending_delivery(self) -> list[dict]:
+        """Órdenes pendientes de entrega o pago parcial (no completadas)."""
+        orders = self._db_session.query(Order).filter(
+            Order.status == ORDER_STATUSES_PENDING,
+            Order.amount_paid < Order.total,
+        ).order_by(Order.date.desc()).all()
+        return [self._to_dict(o) for o in orders]

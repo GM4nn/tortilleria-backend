@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     command.upgrade(Config("alembic.ini"), "head")
     run_bootstrap()
     ws_manager.set_loop(asyncio.get_running_loop())
-    scheduler.start()  # jobs diarios: limpiar Firestore (00:00) + generar pedidos (05:00)
+    scheduler.start()  # jobs semanales: limpiar Firestore (martes 00:00) + generar pedidos (martes 05:00)
 
     # Sincroniza clientes y rutas a Firestore (para el mapa del móvil) sin bloquear
     def _initial_sync():
