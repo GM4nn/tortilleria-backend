@@ -267,14 +267,22 @@ class OrderProvider:
         detalle si es un producto agregado), total neto y pago. Si complete=True
         marca el pedido como completado; si es False solo guarda (sigue pendiente)."""
         order = self._get(order_id)
-        details = {d.product_id: d for d in order.order_details}
+        detail_pool = list(order.order_details)
+        used = set()
+
+        def find_detail(pid: int):
+            for i, d in enumerate(detail_pool):
+                if d.product_id == pid and i not in used:
+                    used.add(i)
+                    return d
+            return None
 
         for it in items:
             pid = it.get("product_id")
             if pid is None:
                 continue
             qty = float(it.get("quantity") or 0.0)
-            d = details.get(pid)
+            d = find_detail(pid)
             if d is None:
                 if qty <= 0:
                     continue
@@ -283,13 +291,12 @@ class OrderProvider:
                 d = OrderDetail(product_id=pid, quantity=qty, unit_price=price,
                                 subtotal=round(qty * price, 2), grammage=gram)
                 order.order_details.append(d)
-                details[pid] = d
-                continue
-            price = float(it.get("price") or d.unit_price or 0.0)
-            d.quantity = qty
-            d.unit_price = price
-            d.subtotal = round(qty * price, 2)
-            d.grammage = float(it.get("grammage") or 0)
+            else:
+                price = float(it.get("price") or d.unit_price or 0.0)
+                d.quantity = qty
+                d.unit_price = price
+                d.subtotal = round(qty * price, 2)
+                d.grammage = float(it.get("grammage") or 0)
 
         # Devoluciones (se reconstruyen desde 'returned')
         self._db_session.query(OrderRefund).filter(
