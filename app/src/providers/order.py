@@ -374,3 +374,23 @@ class OrderProvider:
             Order.amount_paid < Order.total,
         ).order_by(Order.date.desc()).all()
         return [self._to_dict(o) for o in orders]
+
+    def complete_all(self, order_ids: list[int]) -> dict:
+        """Marca como completadas y pagas todas las órdenes indicadas."""
+        completed = 0
+        total_paid = 0.0
+        for oid in order_ids:
+            order = self._db_session.query(Order).filter(Order.id == oid).first()
+            if not order:
+                continue
+            order.status = ORDER_STATUSES_COMPLETE
+            order.amount_paid = round(order.total, 2)
+            if not order.completed_at:
+                order.completed_at = mexico_now()
+            firestore_service.update_order_status(oid, ORDER_STATUSES_COMPLETE)
+            firestore_service.sync_payment(oid, order.amount_paid)
+            completed += 1
+            total_paid += order.amount_paid
+        self._db_session.commit()
+        ws_manager.notify("orders")
+        return {"completed": completed, "total_paid": round(total_paid, 2)}

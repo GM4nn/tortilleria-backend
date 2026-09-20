@@ -44,6 +44,10 @@ class DeliveryInput(BaseModel):
     complete: bool = True  # False = solo guardar info (sigue pendiente)
 
 
+class CompleteAllInput(BaseModel):
+    order_ids: list[int]
+
+
 @router.post("/generate-order", description="Genera el pedido de HOY de un cliente")
 def generate_order(data: GenerateOrderInput, db: Session = Depends(get_db)):
     return ScheduledOrderProvider(db).generate_for_customer(
@@ -72,3 +76,8 @@ def order_complete(order_id: int, data: DeliveryInput, db: Session = Depends(get
 @router.get("/pending-orders", description="Órdenes pendientes de entrega o pago parcial (semanas anteriores)")
 def pending_orders(db: Session = Depends(get_db)):
     return OrderProvider(db).get_pending_delivery()
+
+
+@router.post("/complete-all", description="Completa y paga todas las órdenes indicadas")
+def complete_all(data: CompleteAllInput, db: Session = Depends(get_db)):
+    return OrderProvider(db).complete_all(data.order_ids)
