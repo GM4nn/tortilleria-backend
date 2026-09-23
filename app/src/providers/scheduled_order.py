@@ -95,7 +95,9 @@ class ScheduledOrderProvider:
         if cpp:
             return cpp.custom_price
         product = self._db_session.query(Product).filter(Product.id == product_id).first()
-        return product.price if product else None
+        if not product:
+            return None
+        return product.order_price if product.order_price is not None else product.price
 
     def generate_todays_orders(self) -> dict:
         """Crea los pedidos reales de hoy desde las plantillas activas.
