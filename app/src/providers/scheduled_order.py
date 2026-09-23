@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 # sqlalchemy
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 # app
 from app.core.constants import mexico_now
@@ -127,7 +127,9 @@ class ScheduledOrderProvider:
         ).all()
         customers_with_order: set[int] = {r[0] for r in rows}
 
-        scheduleds = self._db_session.query(ScheduledOrder).filter(
+        scheduleds = self._db_session.query(ScheduledOrder).options(
+            selectinload(ScheduledOrder.items)
+        ).filter(
             ScheduledOrder.active.is_(True)
         ).all()
 
@@ -190,7 +192,10 @@ class ScheduledOrderProvider:
 
         # Sync batch: garantiza que TODAS las órdenes de hoy lleguen a Firestore
         # (incluye las que add_order individual no pudo subir por timeout/error)
-        firestore_service.sync_today_orders(self._db_session)
+        try:
+            firestore_service.sync_today_orders(self._db_session)
+        except Exception as exc:
+            print(f"[Programados] Error sync Firestore: {exc}")
 
         return {"created": created, "skipped": skipped, "errors": errors, "weekday": weekday}
 

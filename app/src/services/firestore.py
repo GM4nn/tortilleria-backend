@@ -250,23 +250,23 @@ class FirestoreService:
         synced = 0
         errors = 0
         for o in orders:
-            c = db.query(Customer).filter(Customer.id == o.customer_id).first()
-            if not c:
-                errors += 1
-                continue
-            route = c.route
-            fs_items = []
-            for d in o.order_details:
-                prod = d.product
-                fs_items.append({
-                    "product_id": d.product_id,
-                    "name": prod.name if prod else "N/A",
-                    "price": d.unit_price,
-                    "quantity": d.quantity,
-                    "subtotal": d.subtotal,
-                    "grammage": d.grammage,
-                })
             try:
+                c = db.query(Customer).filter(Customer.id == o.customer_id).first()
+                if not c:
+                    errors += 1
+                    continue
+                route = c.route
+                fs_items = []
+                for d in o.order_details:
+                    prod = d.product
+                    fs_items.append({
+                        "product_id": d.product_id,
+                        "name": prod.name if prod else "N/A",
+                        "price": d.unit_price,
+                        "quantity": d.quantity,
+                        "subtotal": d.subtotal,
+                        "grammage": d.grammage,
+                    })
                 doc = {
                     "order_id": o.id,
                     "customer_name": c.customer_name,
