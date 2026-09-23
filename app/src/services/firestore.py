@@ -8,6 +8,7 @@ from app.core.constants import (
     ORDER_STATUSES_PENDING,
     SHOP_LAT,
     SHOP_LNG,
+    mexico_now,
 )
 from app.src.models import Customer, Product, Route
 
@@ -228,6 +229,72 @@ class FirestoreService:
         except Exception as exc:  # noqa: BLE001
             print(f"[Firestore] Error limpiando obsoletas: {exc}")
         return removed
+
+    def sync_today_orders(self, db) -> dict:
+        """Batch-sync: lee TODAS las órdenes de hoy de SQLite y las escribe
+        a Firestore (upsert). Garantiza que todas lleguen, incluso si las
+        llamadas individuales a add_order fallaron antes."""
+        if not self._available:
+            return {"synced": 0, "errors": 0, "total": 0, "reason": "Firestore no disponible"}
+        from datetime import datetime, timedelta
+        from app.src.models import Order, Customer
+
+        now = mexico_now()
+        today = now.date()
+        day_start = datetime(today.year, today.month, today.day)
+        day_end = day_start + timedelta(days=1)
+
+        orders = db.query(Order).filter(
+            Order.date >= day_start, Order.date < day_end
+        ).all()
+        synced = 0
+        errors = 0
+        for o in orders:
+            c = db.query(Customer).filter(Customer.id == o.customer_id).first()
+            if not c:
+                errors += 1
+                continue
+            route = c.route
+            fs_items = []
+            for d in o.order_details:
+                prod = d.product
+                fs_items.append({
+                    "product_id": d.product_id,
+                    "name": prod.name if prod else "N/A",
+                    "price": d.unit_price,
+                    "quantity": d.quantity,
+                    "subtotal": d.subtotal,
+                    "grammage": d.grammage,
+                })
+            try:
+                doc = {
+                    "order_id": o.id,
+                    "customer_name": c.customer_name,
+                    "customer_id": c.id,
+                    "items": fs_items,
+                    "total": o.total,
+                    "amount_paid": o.amount_paid or 0.0,
+                    "status": o.status or ORDER_STATUSES_PENDING,
+                    "created_at": o.date.isoformat() if o.date else "",
+                    "default_dealer": o.default_dealer,
+                    "notes": o.notes or "",
+                    "customer_lat": c.latitude,
+                    "customer_lng": c.longitude,
+                    "customer_direction": c.customer_direction,
+                    "route_id": c.route_id,
+                    "route_name": route.name if route else None,
+                    "route_color": route.color if route else None,
+                    "route_dealers": route.dealer_usernames if route else [],
+                    "shop_lat": SHOP_LAT,
+                    "shop_lng": SHOP_LNG,
+                }
+                self._db.collection(self._orders_collection).document(str(o.id)).set(doc)
+                synced += 1
+            except Exception as exc:
+                errors += 1
+                print(f"[Firestore] Error sync batch order #{o.id}: {exc}")
+        print(f"[Firestore] Batch sync: {synced} OK, {errors} errores, {len(orders)} total")
+        return {"synced": synced, "errors": errors, "total": len(orders)}
 
     # -------- clientes / rutas (para el mapa del móvil) --------
 

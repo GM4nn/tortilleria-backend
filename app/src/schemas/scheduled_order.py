@@ -33,4 +33,5 @@ class ScheduledOrderRead(BaseModel):
 class GenerateResult(BaseModel):
     created: int
     skipped: int
+    errors: int
     weekday: int
