@@ -114,8 +114,11 @@ class ScheduledOrderProvider:
         day_start = datetime(today.year, today.month, today.day)
         day_end = day_start + timedelta(days=1)
 
-        # Deja en Firestore SOLO las órdenes de hoy (borra las de ayer, etc.)
-        firestore_service.clear_stale_orders(today.isoformat())
+        # Borrar solo los de la SEMANA PASADA (no los de esta semana).
+        # keep_date = inicio de esta semana (lunes), para no borrar pedidos de
+        # lunes-domingo de la semana en curso.
+        week_start = today - timedelta(days=weekday)
+        firestore_service.clear_stale_orders(week_start.isoformat())
 
         # Clientes que YA tienen un pedido hoy (cualquier vía): no duplicarlos
         rows = self._db_session.query(Order.customer_id).filter(

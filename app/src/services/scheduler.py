@@ -28,7 +28,10 @@ def _generate_job() -> None:
 
 
 def _cleanup_job() -> None:
-    firestore_service.clear_orders()
+    """Borra de Firestore solo las órdenes de la semana pasada."""
+    now = mexico_now()
+    week_start = now.date() - __import__('datetime').timedelta(days=now.weekday())
+    firestore_service.clear_stale_orders(week_start.isoformat())
 
 
 async def _run_weekly_at(weekday: int, hour: int, minute: int, job, name: str) -> None:
