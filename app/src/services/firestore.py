@@ -1,5 +1,6 @@
 # other libs
 import json
+import threading
 
 # app
 from app.core.config import settings
@@ -92,35 +93,43 @@ class FirestoreService:
     ) -> None:
         if not self._available:
             return
-        try:
-            self._db.collection(self._orders_collection).document(str(order_id)).set(
-                {
-                    "order_id": order_id,
-                    "customer_name": customer_name,
-                    "customer_id": customer_id,
-                    "items": items,
-                    "total": total,
-                    "amount_paid": amount_paid,
-                    "status": ORDER_STATUSES_PENDING,
-                    "created_at": created_at,
-                    "default_dealer": default_dealer,
-                    "notes": notes or "",
-                    # Ubicación + ruta para el mapa del móvil
-                    "customer_lat": customer_lat,
-                    "customer_lng": customer_lng,
-                    "customer_direction": customer_direction,
-                    "route_id": route_id,
-                    "route_name": route_name,
-                    "route_color": route_color,
-                    "route_dealers": route_dealers or [],
-                    "delivery_time": delivery_time,
-                    # Ubicación de la tienda (para ordenar la ruta por cercanía)
-                    "shop_lat": SHOP_LAT,
-                    "shop_lng": SHOP_LNG,
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"[Firestore] Error order #{order_id}: {exc}")
+        _error = [None]
+        def _sync():
+            try:
+                self._db.collection(self._orders_collection).document(str(order_id)).set(
+                    {
+                        "order_id": order_id,
+                        "customer_name": customer_name,
+                        "customer_id": customer_id,
+                        "items": items,
+                        "total": total,
+                        "amount_paid": amount_paid,
+                        "status": ORDER_STATUSES_PENDING,
+                        "created_at": created_at,
+                        "default_dealer": default_dealer,
+                        "notes": notes or "",
+                        "customer_lat": customer_lat,
+                        "customer_lng": customer_lng,
+                        "customer_direction": customer_direction,
+                        "route_id": route_id,
+                        "route_name": route_name,
+                        "route_color": route_color,
+                        "route_dealers": route_dealers or [],
+                        "delivery_time": delivery_time,
+                        "shop_lat": SHOP_LAT,
+                        "shop_lng": SHOP_LNG,
+                    }
+                )
+            except Exception as exc:
+                _error[0] = exc
+
+        t = threading.Thread(target=_sync, daemon=True)
+        t.start()
+        t.join(timeout=10)
+        if t.is_alive():
+            print(f"[Firestore] Timeout order #{order_id} (>10s)")
+        elif _error[0]:
+            print(f"[Firestore] Error order #{order_id}: {_error[0]}")
 
     def sync_order_items(self, order_id: int, items: list[dict], total: float) -> None:
         if not self._available:
@@ -193,12 +202,8 @@ class FirestoreService:
             print(f"[Firestore] Error limpiando órdenes: {exc}")
 
     def clear_stale_orders(self, keep_date_prefix: str) -> int:
-        """Borra de Firestore las órdenes que NO son del día indicado
-        (keep_date_prefix = 'YYYY-MM-DD'), dejando intactas las de hoy.
-
-        Sirve para auto-repararse si la limpieza de medianoche no corrió (backend
-        apagado/reiniciado): así, al generar los pedidos de hoy, no quedan los de
-        ayer sin completar mezclados con los nuevos."""
+        """Borra de Firestore las órdenes anteriores a keep_date_prefix
+        (keep_date_prefix = 'YYYY-MM-DD'), dejando intactas las de esa fecha en adelante."""
         if not self._available:
             return 0
         removed = 0
@@ -209,7 +214,9 @@ class FirestoreService:
             for doc in col.stream():
                 data = doc.to_dict() or {}
                 created = str(data.get("created_at") or "")
-                if not created.startswith(keep_date_prefix):
+                # Extraer la parte de fecha (YYYY-MM-DD) del created_at
+                created_date = created[:10] if len(created) >= 10 else created
+                if created_date < keep_date_prefix:
                     batch.delete(doc.reference)
                     removed += 1
                     n += 1

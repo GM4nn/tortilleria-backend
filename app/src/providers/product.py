@@ -81,6 +81,7 @@ class ProductProvider:
         # Sincronizar producto y clientes a Firestore
         firestore_service.upsert_product(product)
         for c in customers:
+            self._db_session.refresh(c, attribute_names=["product_prices"])
             firestore_service.upsert_customer(c)
 
         total = len(existing) + created

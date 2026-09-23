@@ -220,24 +220,27 @@ class OrderProvider:
         self._db_session.refresh(order)
 
         route = customer.route
-        firestore_service.add_order(
-            order_id=order.id,
-            customer_name=customer.customer_name,
-            customer_id=customer.id,
-            items=fs_items,
-            total=total,
-            amount_paid=data.amount_paid,
-            created_at=order.date.isoformat() if order.date else mexico_now().isoformat(),
-            default_dealer=data.default_dealer,
-            notes=data.notes,
-            customer_lat=customer.latitude,
-            customer_lng=customer.longitude,
-            customer_direction=customer.customer_direction,
-            route_id=customer.route_id,
-            route_name=route.name if route else None,
-            route_color=route.color if route else None,
-            route_dealers=route.dealer_usernames if route else [],
-        )
+        try:
+            firestore_service.add_order(
+                order_id=order.id,
+                customer_name=customer.customer_name,
+                customer_id=customer.id,
+                items=fs_items,
+                total=total,
+                amount_paid=data.amount_paid,
+                created_at=order.date.isoformat() if order.date else mexico_now().isoformat(),
+                default_dealer=data.default_dealer,
+                notes=data.notes,
+                customer_lat=customer.latitude,
+                customer_lng=customer.longitude,
+                customer_direction=customer.customer_direction,
+                route_id=customer.route_id,
+                route_name=route.name if route else None,
+                route_color=route.color if route else None,
+                route_dealers=route.dealer_usernames if route else [],
+            )
+        except Exception as exc:
+            print(f"[Order #{order.id}] Error sync Firestore: {exc}")
         return self._to_dict(order)
 
     # -------- acciones desde la app móvil (guardan en SQLite; la móvil ya
