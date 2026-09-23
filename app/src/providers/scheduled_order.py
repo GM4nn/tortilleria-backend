@@ -116,11 +116,9 @@ class ScheduledOrderProvider:
         day_start = datetime(today.year, today.month, today.day)
         day_end = day_start + timedelta(days=1)
 
-        # Borrar solo los de la SEMANA PASADA (no los de esta semana).
-        # keep_date = inicio de esta semana (lunes), para no borrar pedidos de
-        # lunes-domingo de la semana en curso.
-        week_start = today - timedelta(days=weekday)
-        firestore_service.clear_stale_orders(week_start.isoformat())
+        # Borrar obsoletas SOLO en el cleanup de medianoche (_cleanup_job),
+        # NO aquí: generate_todays_orders puede ser llamado manualmente desde
+        # el frontend y borraría las órdenes que ya existen en Firestore.
 
         # Clientes que YA tienen un pedido hoy (cualquier vía): no duplicarlos
         rows = self._db_session.query(Order.customer_id).filter(
@@ -189,6 +187,10 @@ class ScheduledOrderProvider:
 
             customers_with_order.add(sched.customer_id)  # no duplicar en esta corrida
             created += 1
+
+        # Sync batch: garantiza que TODAS las órdenes de hoy lleguen a Firestore
+        # (incluye las que add_order individual no pudo subir por timeout/error)
+        firestore_service.sync_today_orders(self._db_session)
 
         return {"created": created, "skipped": skipped, "errors": errors, "weekday": weekday}
 

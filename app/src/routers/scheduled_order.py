@@ -17,6 +17,7 @@ from app.src.schemas.scheduled_order import (
 
 # providers
 from app.src.providers.scheduled_order import ScheduledOrderProvider
+from app.src.services.firestore import firestore_service
 
 
 router = APIRouter(prefix="/scheduled-orders", tags=["scheduled-orders"])
@@ -62,3 +63,12 @@ def delete_scheduled(scheduled_id: int, db: Session = Depends(get_db)):
 )
 def generate_today(db: Session = Depends(get_db)):
     return ScheduledOrderProvider(db).generate_todays_orders()
+
+
+@router.post(
+    "/sync-today",
+    description="Re-sincroniza TODAS las órdenes de hoy a Firestore (batch). "
+                "Útil si el mobile no muestra pedidos.",
+)
+def sync_today(db: Session = Depends(get_db)):
+    return firestore_service.sync_today_orders(db)
