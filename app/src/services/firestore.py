@@ -349,7 +349,7 @@ class FirestoreService:
             "id": p.id,
             "name": p.name,
             "icon": p.icon,
-            "price": p.price,
+            "price": p.order_price if p.order_price is not None else p.price,
             "active": bool(p.active),
             "is_default": bool(p.is_default),
         }
