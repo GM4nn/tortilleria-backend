@@ -17,6 +17,7 @@ class OrderItemInput(BaseModel):
 
 class OrderCreate(BaseModel):
     customer_id: int
+    date: datetime | None = None
     notes: str | None = None
     amount_paid: float = Field(default=0.0, ge=0)
     default_dealer: str | None = None

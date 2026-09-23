@@ -205,7 +205,7 @@ class OrderProvider:
         if data.amount_paid > total:
             raise ValueError("El anticipo no puede exceder el total")
 
-        order = Order(
+        order_kwargs = dict(
             total=total,
             customer_id=data.customer_id,
             status=ORDER_STATUSES_PENDING,
@@ -214,6 +214,9 @@ class OrderProvider:
             default_dealer=data.default_dealer,
             scheduled_order_id=data.scheduled_order_id,
         )
+        if data.date is not None:
+            order_kwargs["date"] = data.date
+        order = Order(**order_kwargs)
         order.order_details = details
         self._db_session.add(order)
         self._db_session.commit()
