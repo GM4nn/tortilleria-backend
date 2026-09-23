@@ -251,10 +251,9 @@ class OrderProvider:
         return self._to_dict(order)
 
     def set_amount_paid(self, order_id: int, amount: float) -> dict:
-        """Fija el TOTAL pagado (no suma). Se topa entre 0 y el total del pedido."""
+        """Fija el TOTAL pagado (no suma). Puede ser mayor al total (cambio)."""
         order = self._get(order_id)
-        paid = min(round(float(amount), 2), round(order.total, 2))
-        order.amount_paid = paid if paid > 0 else 0.0
+        order.amount_paid = round(float(amount), 2) if float(amount) > 0 else 0.0
         self._db_session.commit()
         ws_manager.notify("orders")
         return self._to_dict(order)
@@ -321,13 +320,12 @@ class OrderProvider:
         return self._to_dict(order)
 
     def register_payment(self, order_id: int, amount: float) -> dict:
+        """Registra un abono. Puede exceder el total (el cambio queda registrado)."""
         order = self._get(order_id)
         new_paid = (order.amount_paid or 0.0) + amount
-        if new_paid > order.total:
-            raise ValueError(f"El monto excede el total del pedido (${order.total:.2f})")
-        order.amount_paid = new_paid
+        order.amount_paid = round(new_paid, 2)
         self._db_session.commit()
-        firestore_service.sync_payment(order_id, new_paid)
+        firestore_service.sync_payment(order_id, order.amount_paid)
         ws_manager.notify("orders")
         return self._to_dict(order)
 
@@ -337,12 +335,7 @@ class OrderProvider:
         # Se puede completar aunque no esté pagado; el pago final es opcional
         if data.final_payment > 0:
             new_paid = (order.amount_paid or 0.0) + data.final_payment
-            if round(new_paid, 2) > round(order.total, 2):
-                restante = order.total - (order.amount_paid or 0.0)
-                raise ValueError(
-                    f"El pago excede el total del pedido. Restante: ${restante:.2f}"
-                )
-            order.amount_paid = new_paid
+            order.amount_paid = round(new_paid, 2)
 
         for item in data.refund_items:
             self._db_session.add(OrderRefund(
