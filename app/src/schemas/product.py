@@ -24,5 +24,6 @@ class ProductRead(BaseModel):
     code: str | None = None
     is_default: bool = False
     display_order: int = 100
+    order_price: float | None = None
 
     model_config = ConfigDict(from_attributes=True)

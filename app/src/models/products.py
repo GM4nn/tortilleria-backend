@@ -17,6 +17,8 @@ class Product(Base):
     is_default = Column(Boolean, nullable=False, default=False)
     # Orden de visualización (menor = primero); nuevos productos van al final
     display_order = Column(Integer, nullable=False, default=100)
+    # Precio que se usa en pedidos programados (null = usar price base)
+    order_price = Column(Float, nullable=True)
 
     # Relationship
     # Al borrar un producto se borran los detalles de venta que lo referencian

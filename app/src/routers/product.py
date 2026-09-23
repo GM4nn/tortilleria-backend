@@ -1,6 +1,9 @@
 # fastapi
 from fastapi import APIRouter, Depends, status
 
+# pydantic
+from pydantic import BaseModel
+
 # sqlalchemy
 from sqlalchemy.orm import Session
 
@@ -11,6 +14,10 @@ from app.src.schemas.product import ProductCreate, ProductRead, ProductUpdate
 
 
 router = APIRouter(prefix="/products", tags=["products"])
+
+
+class OrderPriceInput(BaseModel):
+    price: float
 
 
 @router.get("", response_model=list[ProductRead])
@@ -31,6 +38,12 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db)):
 @router.put("/{product_id}", response_model=ProductRead)
 def update_product(product_id: int, data: ProductUpdate, db: Session = Depends(get_db)):
     return ProductProvider(db).update(product_id, data)
+
+
+@router.put("/{product_id}/order-price")
+def update_order_price(product_id: int, data: OrderPriceInput, db: Session = Depends(get_db)):
+    """Actualiza el precio de pedidos para TODOS los clientes que tengan este producto."""
+    return ProductProvider(db).update_all_customer_prices(product_id, data.price)
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
