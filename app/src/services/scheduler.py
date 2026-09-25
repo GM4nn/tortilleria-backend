@@ -4,7 +4,7 @@ Sin dependencias extra: encaja en la máquina siempre-encendida de Fly.
 Dos jobs (cada martes):
   - 00:00: limpiar las órdenes en Firestore (el móvil arranca la semana
     en limpio; la SQLite conserva el historial).
-  - 05:00: generar los pedidos de la semana desde las plantillas programadas.
+  - 04:00: generar los pedidos de la semana desde las plantillas programadas.
 Horas en America/Mexico_City (mexico_now).
 """
 # std
@@ -16,6 +16,8 @@ from app.core.constants import mexico_now
 from app.core.database import SessionLocal
 from app.src.providers.scheduled_order import ScheduledOrderProvider
 from app.src.services.firestore import firestore_service
+
+_scheduler_tasks: set[asyncio.Task] | None = None
 
 
 def _generate_job() -> None:
@@ -65,7 +67,13 @@ async def _run_daily_at(hour: int, minute: int, job, name: str) -> None:
 
 
 def start() -> None:
-    """Lanza los jobs: limpieza semanal (martes 00:00) y generación diaria (05:00)."""
-    asyncio.create_task(_run_weekly_at(1, 0, 0, _cleanup_job, "limpiar Firestore"))
-    asyncio.create_task(_run_daily_at(5, 0, _generate_job, "generar pedidos"))
-    print("[Scheduler] Jobs activos: limpieza semanal martes 00:00 + generación diaria 05:00")
+    """Lanza los jobs: limpieza semanal (martes 00:00) y generación diaria (04:00).
+    Si ya hay tareas activas, no crea duplicados."""
+    global _scheduler_tasks
+    if _scheduler_tasks and any(not t.done() for t in _scheduler_tasks):
+        print("[Scheduler] Tasks ya activos, omitiendo start()")
+        return
+    _scheduler_tasks = set()
+    _scheduler_tasks.add(asyncio.create_task(_run_weekly_at(1, 0, 0, _cleanup_job, "limpiar Firestore")))
+    _scheduler_tasks.add(asyncio.create_task(_run_daily_at(4, 0, _generate_job, "generar pedidos")))
+    print("[Scheduler] Jobs activos: limpieza semanal martes 00:00 + generación diaria 04:00")
