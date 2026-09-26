@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, status
 # sqlalchemy
 from sqlalchemy.orm import Session
 
+# pydantic
+from pydantic import BaseModel
+
 # app
 from app.core.database import get_db
 from app.src.providers.order import OrderProvider
@@ -17,6 +20,10 @@ from app.src.schemas.order import (
     PaginatedOrders,
     PaymentInput,
 )
+
+
+class DeleteOrdersInput(BaseModel):
+    order_ids: list[int]
 
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -75,3 +82,15 @@ def complete_order(order_id: int, data: CompleteOrderInput, db: Session = Depend
 @router.post("/{order_id}/cancel", response_model=OrderRead)
 def cancel_order(order_id: int, db: Session = Depends(get_db)):
     return OrderProvider(db).cancel(order_id)
+
+
+@router.post("/batch/delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_orders_batch(data: DeleteOrdersInput, db: Session = Depends(get_db)):
+    """Elimina múltiples órdenes por ID"""
+    provider = OrderProvider(db)
+    for order_id in data.order_ids:
+        try:
+            provider.delete(order_id)
+        except Exception:
+            pass
+    return None
