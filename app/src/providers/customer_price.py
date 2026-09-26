@@ -22,6 +22,7 @@ class CustomerPriceProvider:
             Customer.id == customer_id
         ).first()
         if customer:
+            self._db_session.refresh(customer, attribute_names=["product_prices"])
             firestore_service.upsert_customer(customer)
 
     def _sync_order(self, order: Order) -> None:
