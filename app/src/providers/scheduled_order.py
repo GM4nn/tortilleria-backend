@@ -82,7 +82,38 @@ class ScheduledOrderProvider:
             for it in data.items
         ]
         self._db_session.commit()
+
+        # Si hay precios en los items, guardarlos como CustomerProductPrice y sincronizar
+        for it in data.items:
+            if it.price is not None and it.price > 0:
+                existing = self._db_session.query(CustomerProductPrice).filter(
+                    CustomerProductPrice.customer_id == data.customer_id,
+                    CustomerProductPrice.product_id == it.product_id,
+                ).first()
+
+                if existing:
+                    existing.custom_price = it.price
+                else:
+                    self._db_session.add(CustomerProductPrice(
+                        customer_id=data.customer_id,
+                        product_id=it.product_id,
+                        custom_price=it.price,
+                    ))
+
+        self._db_session.commit()
         self._db_session.refresh(sched)
+
+        # Sincronizar cliente a Firestore para que el móvil vea los precios actualizados
+        try:
+            customer = self._db_session.query(Customer).filter(
+                Customer.id == data.customer_id
+            ).first()
+            if customer:
+                self._db_session.refresh(customer, attribute_names=["product_prices"])
+                firestore_service.upsert_customer(customer)
+        except Exception as exc:
+            print(f"[ScheduledOrder] Error sincronizando cliente #{data.customer_id}: {exc}")
+
         return self._to_dict(sched)
 
     def delete(self, scheduled_id: int) -> None:

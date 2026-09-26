@@ -6,6 +6,7 @@ class ScheduledOrderItemIO(BaseModel):
     weekday: int = Field(ge=0, le=6)   # 0=lunes ... 6=domingo
     product_id: int
     quantity: float = Field(gt=0)
+    price: float | None = None  # Precio personalizado opcional (sincroniza a Firestore)
 
 
 class ScheduledOrderCreate(BaseModel):
