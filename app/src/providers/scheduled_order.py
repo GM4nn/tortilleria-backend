@@ -1,5 +1,6 @@
 # datetime
 from datetime import datetime, timedelta
+import threading
 
 # sqlalchemy
 from sqlalchemy.orm import Session, selectinload
@@ -18,6 +19,8 @@ from app.src.providers.order import OrderProvider
 from app.src.schemas.order import OrderCreate, OrderItemInput
 from app.src.schemas.scheduled_order import ScheduledOrderCreate, ScheduledOrderUpdate
 from app.src.services.firestore import firestore_service
+
+_generate_lock = threading.Lock()
 
 
 class ScheduledOrderProvider:
@@ -110,6 +113,10 @@ class ScheduledOrderProvider:
           otra plantilla, o manual) no se le crea otro. Así nunca hay dos pedidos
           del mismo cliente en el día.
         """
+        with _generate_lock:
+            return self._generate_todays_orders_impl()
+
+    def _generate_todays_orders_impl(self) -> dict:
         now = mexico_now()
         weekday = now.weekday()  # 0=lunes ... 6=domingo
         today = now.date()
