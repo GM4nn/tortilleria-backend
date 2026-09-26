@@ -42,6 +42,7 @@ class DeliveryInput(BaseModel):
     total: float
     amount_paid: float
     complete: bool = True  # False = solo guardar info (sigue pendiente)
+    customer_id: int | None = None  # Opcional: fallback si ID de Firestore no coincide con SQLite
 
 
 class CompleteAllInput(BaseModel):
@@ -69,7 +70,8 @@ def order_payment(order_id: int, data: PaymentInput, db: Session = Depends(get_d
 def order_complete(order_id: int, data: DeliveryInput, db: Session = Depends(get_db)):
     items = [i.model_dump() for i in data.items]
     return OrderProvider(db).apply_delivery(
-        order_id, items, data.total, data.amount_paid, complete=data.complete
+        order_id, items, data.total, data.amount_paid, complete=data.complete,
+        customer_id=data.customer_id
     )
 
 

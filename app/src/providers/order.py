@@ -101,6 +101,27 @@ class OrderProvider:
             raise ValueError("Pedido no encontrado")
         return order
 
+    def _get_or_resolve(self, order_id: int, customer_id: int | None = None) -> Order:
+        """Busca un pedido por ID. Si no existe y customer_id se proporciona,
+        busca el pedido del cliente de hoy (en caso de discrepancia entre
+        IDs de Firestore y SQLite). Esto es un fallback para sincronización."""
+        order = self._db_session.query(Order).filter(Order.id == order_id).first()
+        if order:
+            return order
+
+        if customer_id:
+            today_start = mexico_now().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_end = today_start + timedelta(days=1)
+            order = self._db_session.query(Order).filter(
+                Order.customer_id == customer_id,
+                Order.date >= today_start,
+                Order.date < today_end,
+            ).first()
+            if order:
+                return order
+
+        raise ValueError("Pedido no encontrado")
+
     def get_by_id(self, order_id: int) -> dict:
         return self._to_dict(self._get(order_id))
 
@@ -266,12 +287,13 @@ class OrderProvider:
 
     def apply_delivery(
         self, order_id: int, items: list[dict], total: float, amount_paid: float,
-        complete: bool = True,
+        complete: bool = True, customer_id: int | None = None,
     ) -> dict:
         """Guarda la entrega desde el móvil: kilos entregados/devueltos (crea el
         detalle si es un producto agregado), total neto y pago. Si complete=True
-        marca el pedido como completado; si es False solo guarda (sigue pendiente)."""
-        order = self._get(order_id)
+        marca el pedido como completado; si es False solo guarda (sigue pendiente).
+        [customer_id] opcional: usado como fallback si el ID de Firestore no coincide."""
+        order = self._get_or_resolve(order_id, customer_id)
         detail_pool = list(order.order_details)
         used = set()
 
