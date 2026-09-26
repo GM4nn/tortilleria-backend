@@ -415,3 +415,11 @@ class OrderProvider:
         self._db_session.commit()
         ws_manager.notify("orders")
         return {"completed": completed, "total_paid": round(total_paid, 2)}
+
+    def delete(self, order_id: int) -> None:
+        """Elimina una orden de la BD."""
+        order = self._get(order_id)
+        self._db_session.delete(order)
+        self._db_session.commit()
+        firestore_service.delete_order(order_id)
+        ws_manager.notify("orders")
