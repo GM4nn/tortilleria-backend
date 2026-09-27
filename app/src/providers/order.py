@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 # sqlalchemy
 from sqlalchemy import exists, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 # app
@@ -240,7 +241,16 @@ class OrderProvider:
         order = Order(**order_kwargs)
         order.order_details = details
         self._db_session.add(order)
-        self._db_session.commit()
+        try:
+            self._db_session.commit()
+        except IntegrityError as exc:
+            self._db_session.rollback()
+            if "uq_order_customer_active_day" in str(exc):
+                raise ValueError(
+                    "Este cliente ya tiene un pedido activo hoy. "
+                    "Cancela o completa el existente antes de crear otro."
+                ) from exc
+            raise
         self._db_session.refresh(order)
 
         route = customer.route

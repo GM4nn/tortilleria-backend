@@ -43,8 +43,9 @@ async def _run_weekly_at(weekday: int, hour: int, minute: int, job, name: str) -
     while True:
         now = mexico_now()
         target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        days_until = weekday - now.weekday()
-        if days_until < 0 or (days_until == 0 and target <= now):
+        days_until = (weekday - now.weekday()) % 7
+        target += timedelta(days=days_until)
+        if target <= now:
             target += timedelta(days=7)
         await asyncio.sleep((target - now).total_seconds())
         try:
